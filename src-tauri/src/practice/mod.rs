@@ -1,6 +1,7 @@
 //! Practice sessions. Every change is saved before the call returns, so closing the app
 //! or a crash loses nothing that was confirmed.
 
+mod clock;
 mod model;
 #[cfg(test)]
 mod tests;
@@ -16,6 +17,7 @@ use crate::{
     store,
   },
 };
+pub use clock::{Clock, Reading};
 pub use model::*;
 
 #[derive(Debug)]
@@ -49,6 +51,7 @@ const LOCKED: PracticeError =
   PracticeError::Refused("This answer was already submitted, so it cannot be changed.");
 
 const MAX_QUESTIONS: usize = 500;
+const TIME_LIMIT_SECONDS: std::ops::RangeInclusive<i64> = 60..=6 * 60 * 60;
 /// Longer gaps mean the computer slept or the app was left open.
 const MAX_SECONDS_PER_SAVE: i64 = 600;
 
@@ -83,6 +86,10 @@ pub fn create(conn: &mut Connection, config: &Config, question_ids: &[String]) -
     return Err(PracticeError::Refused("A question cannot appear twice in a session."));
   }
 
+  if config.time_limit_seconds.is_some_and(|limit| !TIME_LIMIT_SECONDS.contains(&limit)) {
+    return Err(PracticeError::Refused("Choose a time limit from 1 to 360 minutes."));
+  }
+
   let tx = begin(conn)?;
   if unfinished_id(&tx, config.section)?.is_some() {
     return Err(PracticeError::Refused("Finish or end your current session first."));
@@ -91,8 +98,8 @@ pub fn create(conn: &mut Connection, config: &Config, question_ids: &[String]) -
   let time = now(&tx)?;
   tx.execute(
     "INSERT INTO practice_sessions (id, session_type, configuration_json, status, started_at,
-       created_at) VALUES (?1, 'targeted', ?2, 'in_progress', ?3, ?3)",
-    params![id, to_json(config)?, time],
+       created_at, time_limit_seconds) VALUES (?1, 'targeted', ?2, 'in_progress', ?3, ?3, ?4)",
+    params![id, to_json(config)?, time, config.time_limit_seconds],
   )?;
   for (position, question_id) in question_ids.iter().enumerate() {
     let snapshot = take_snapshot(&tx, config, question_id)?;
@@ -153,12 +160,16 @@ pub fn unfinished(conn: &Connection, section: Section) -> Result<Option<Session>
 
 /// Answers and explanations are included only for questions whose result may be shown.
 pub fn load(conn: &Connection, id: &str) -> Result<Session> {
-  let (config, status, current_position, created_at, completed_at) = conn
+  let (config, status, current_position, active_ms, created_at, completed_at) = conn
     .query_row(
-      "SELECT configuration_json, status, current_position, created_at, completed_at
+      "SELECT configuration_json, status, current_position, active_ms, created_at,
+         completed_at
        FROM practice_sessions WHERE id = ?1",
       [id],
-      |row| Ok((from_json(row, 0)?, from_text(row, 1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+      |row| {
+        let (config, status) = (from_json(row, 0)?, from_text(row, 1)?);
+        Ok((config, status, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))
+      },
     )
     .optional()?
     .ok_or(NOT_FOUND)?;
@@ -183,7 +194,16 @@ pub fn load(conn: &Connection, id: &str) -> Result<Session> {
       ))
     })?
     .collect::<rusqlite::Result<_>>()?;
-  Ok(Session { id: id.into(), config, status, current_position, created_at, completed_at, questions })
+  Ok(Session {
+    id: id.into(),
+    config,
+    status,
+    current_position,
+    active_ms,
+    created_at,
+    completed_at,
+    questions,
+  })
 }
 
 // ---------------------------------------------------------------- Changing a session
@@ -228,6 +248,14 @@ fn require_active(conn: &Connection, session_id: &str) -> Result<()> {
     .optional()?
     .ok_or(NOT_FOUND)?;
   if status == Status::InProgress { Ok(()) } else { Err(ENDED) }
+}
+
+/// The session that a session question belongs to.
+pub fn session_of(conn: &Connection, id: &str) -> Result<String> {
+  conn
+    .query_row("SELECT session_id FROM session_questions WHERE id = ?1", [id], |row| row.get(0))
+    .optional()?
+    .ok_or(NOT_FOUND)
 }
 
 /// Saves a selection, or clears it. Not an attempt until it is submitted.
@@ -305,7 +333,13 @@ pub fn submit(conn: &mut Connection, id: &str) -> Result<Session> {
 /// Ends the session and submits every selected answer. Unanswered questions get no attempt.
 pub fn finish(conn: &mut Connection, session_id: &str) -> Result<Session> {
   let tx = begin(conn)?;
-  require_active(&tx, session_id)?;
+  let session = finish_in(&tx, session_id)?;
+  tx.commit()?;
+  Ok(session)
+}
+
+fn finish_in(tx: &Connection, session_id: &str) -> Result<Session> {
+  require_active(tx, session_id)?;
   let waiting = tx
     .prepare(
       "SELECT id FROM session_questions s WHERE session_id = ?1 AND selected_choice_id IS NOT NULL
@@ -314,12 +348,10 @@ pub fn finish(conn: &mut Connection, session_id: &str) -> Result<Session> {
     .query_map([session_id], |row| row.get(0))?
     .collect::<rusqlite::Result<Vec<String>>>()?;
   for id in waiting {
-    record_attempt(&tx, &id)?;
+    record_attempt(tx, &id)?;
   }
-  end(&tx, session_id, "completed")?;
-  let session = load(&tx, session_id)?;
-  tx.commit()?;
-  Ok(session)
+  end(tx, session_id, "completed")?;
+  load(tx, session_id)
 }
 
 /// Ends the session without submitting anything more. Submitted answers are kept.

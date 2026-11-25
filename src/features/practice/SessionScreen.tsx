@@ -8,7 +8,9 @@ import { FinishDialog } from './FinishDialog'
 import { QuestionNav } from './QuestionNav'
 import { SessionController } from './SessionController'
 import { SessionResults } from './SessionResults'
+import { SessionTimer } from './SessionTimer'
 import { useQuestionTime } from './useQuestionTime'
+import { useSessionClock } from './useSessionClock'
 
 interface SessionScreenProps {
   session: Session
@@ -25,6 +27,8 @@ export function SessionScreen({ session: initial, onDone }: SessionScreenProps) 
   const question = session.questions[position]
   const isActive = session.status === 'in_progress'
   useQuestionTime(controller, isActive && !question.is_submitted ? question.id : null)
+
+  useSessionClock(controller, isActive)
 
   // A new question starts at the top, with keyboard focus on its heading.
   useEffect(() => {
@@ -57,7 +61,12 @@ export function SessionScreen({ session: initial, onDone }: SessionScreenProps) 
 
   return (
     <div className="mx-auto max-w-3xl">
-      <QuestionNav questions={session.questions} position={position} onGoTo={controller.goTo} />
+      <div className="flex flex-wrap-reverse items-start justify-between gap-x-6 gap-y-3">
+        <QuestionNav questions={session.questions} position={position} onGoTo={controller.goTo} />
+        {session.config.time_limit_seconds !== null && (
+          <SessionTimer controller={controller} limitSeconds={session.config.time_limit_seconds} />
+        )}
+      </div>
       <div className="mt-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
         <h2
           ref={heading}
@@ -94,7 +103,7 @@ export function SessionScreen({ session: initial, onDone }: SessionScreenProps) 
       </p>
       {error !== null && (
         <div role="alert" className="mt-2 rounded-lg border border-rose-accent bg-blush p-4">
-          <p className="font-medium">This change was not saved.</p>
+          <p className="font-medium">This was not saved.</p>
           <p className="mt-1 wrap-anywhere">{error.message}</p>
           <div className="mt-3 flex gap-3">
             <Button onClick={error.retry}>Try Again</Button>

@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use serde_json::{Value, json};
 
 use super::*;
@@ -35,6 +37,7 @@ fn config(explanations: Explanations, question_count: usize) -> Config {
     difficulties: vec![],
     question_count,
     explanations,
+    time_limit_seconds: None,
   }
 }
 
@@ -94,6 +97,8 @@ fn refuses_questions_that_do_not_fit() {
     (base.clone(), ids(&[9]), "no longer available"),
     (base.clone(), vec!["test-rc-1".into()], "does not fit"),
     (Config { category_ids: vec!["lr-flaw".into()], ..base.clone() }, ids(&[1]), "does not fit"),
+    (Config { time_limit_seconds: Some(59), ..base.clone() }, ids(&[1]), "time limit"),
+    (Config { time_limit_seconds: Some(21601), ..base.clone() }, ids(&[1]), "time limit"),
     (Config { difficulties: vec![4], ..base.clone() }, ids(&[1]), "does not fit"),
   ];
   for (config, questions, expected) in cases {
@@ -383,4 +388,207 @@ fn the_same_question_can_be_practiced_again_later() {
   }
   let results: Vec<_> = attempts(&conn).into_iter().map(|(_, correct, _)| correct).collect();
   assert_eq!(results, [false, true]);
+}
+
+// ---------------------------------------------------------------- Clock
+
+/// A 60-second session with question 1 answered, and a moment to count from.
+fn timed(dir: &TempDir) -> (Connection, Session, Instant) {
+  let mut conn = database(dir);
+  let config = Config { time_limit_seconds: Some(60), ..config(Explanations::AtEnd, 2) };
+  let session = create(&mut conn, &config, &ids(&[1, 2])).unwrap();
+  select(&mut conn, &session.questions[0].id, Some(Label::C)).unwrap();
+  (conn, session, Instant::now())
+}
+
+fn after(start: Instant, seconds: f64) -> Instant {
+  start + Duration::from_secs_f64(seconds)
+}
+
+fn active_ms(conn: &Connection, id: &str) -> i64 {
+  load(conn, id).unwrap().active_ms
+}
+
+#[test]
+fn counts_down_only_while_running() {
+  let dir = TempDir::new();
+  let (mut conn, session, t) = timed(&dir);
+  let id = &session.id;
+  let mut clock = Clock::default();
+  assert_eq!(clock.start(&mut conn, id, t).unwrap().remaining_ms, Some(60_000));
+  assert_eq!(clock.save(&mut conn, id, after(t, 5.0)).unwrap().remaining_ms, Some(55_000));
+  assert_eq!(clock.pause(&mut conn, id, after(t, 10.0)).unwrap().remaining_ms, Some(50_000));
+  // A long pause costs nothing.
+  assert_eq!(clock.save(&mut conn, id, after(t, 900.0)).unwrap().remaining_ms, Some(50_000));
+  assert_eq!(clock.start(&mut conn, id, after(t, 1000.0)).unwrap().remaining_ms, Some(50_000));
+  assert_eq!(clock.save(&mut conn, id, after(t, 1001.0)).unwrap().remaining_ms, Some(49_000));
+}
+
+#[test]
+fn frequent_saves_do_not_lose_fractions() {
+  let dir = TempDir::new();
+  let (mut conn, session, t) = timed(&dir);
+  let mut clock = Clock::default();
+  clock.start(&mut conn, &session.id, t).unwrap();
+  for step in 1..=1000 {
+    clock.save(&mut conn, &session.id, after(t, f64::from(step) * 0.0105)).unwrap();
+  }
+  assert_eq!(active_ms(&conn, &session.id), 10_500);
+}
+
+#[test]
+fn running_out_of_time_submits_saved_answers_and_ends() {
+  let dir = TempDir::new();
+  let (mut conn, session, t) = timed(&dir);
+  let mut clock = Clock::default();
+  clock.start(&mut conn, &session.id, t).unwrap();
+  assert_eq!(clock.save(&mut conn, &session.id, after(t, 59.999)).unwrap().ended, None);
+  let reading = clock.save(&mut conn, &session.id, after(t, 75.0)).unwrap();
+  let ended = reading.ended.unwrap();
+  assert_eq!((reading.remaining_ms, ended.active_ms), (Some(0), 60_000));
+  assert_eq!(ended.status, Status::Completed);
+  let results: Vec<_> =
+    ended.questions.iter().map(|question| question.outcome.as_ref().unwrap().is_correct).collect();
+  assert_eq!(results, [Some(true), None]);
+  assert_eq!(attempts(&conn).len(), 1);
+  // Asking again gives the same result.
+  assert_eq!(clock.save(&mut conn, &session.id, after(t, 80.0)).unwrap().ended, Some(ended));
+  assert_eq!(attempts(&conn).len(), 1);
+}
+
+#[test]
+fn late_answers_are_refused() {
+  let dir = TempDir::new();
+  let (mut conn, session, t) = timed(&dir);
+  let mut clock = Clock::default();
+  clock.start(&mut conn, &session.id, t).unwrap();
+  clock.require_time(&mut conn, &session.id, after(t, 59.0)).unwrap();
+  let late = refusal(clock.require_time(&mut conn, &session.id, after(t, 60.0)));
+  assert!(late.contains("Time is up"));
+  assert_eq!(load(&conn, &session.id).unwrap().status, Status::Completed);
+  assert!(refusal(clock.require_time(&mut conn, &session.id, after(t, 61.0))).contains("has ended"));
+}
+
+#[test]
+fn a_paused_timed_session_cannot_be_answered() {
+  let dir = TempDir::new();
+  let (mut conn, session, t) = timed(&dir);
+  let mut clock = Clock::default();
+  assert!(refusal(clock.require_time(&mut conn, &session.id, t)).contains("paused"));
+  clock.start(&mut conn, &session.id, t).unwrap();
+  clock.require_time(&mut conn, &session.id, t).unwrap();
+  clock.pause(&mut conn, &session.id, t).unwrap();
+  assert!(refusal(clock.require_time(&mut conn, &session.id, t)).contains("paused"));
+}
+
+#[test]
+fn an_abrupt_quit_loses_only_time_since_the_last_save() {
+  let dir = TempDir::new();
+  let (mut conn, session, t) = timed(&dir);
+  let mut clock = Clock::default();
+  clock.start(&mut conn, &session.id, t).unwrap();
+  clock.save(&mut conn, &session.id, after(t, 5.0)).unwrap();
+  drop(conn);
+  let mut conn = db::open(&dir.0).unwrap();
+  let resumed = Clock::default().start(&mut conn, &session.id, after(t, 500.0)).unwrap();
+  assert_eq!(resumed.remaining_ms, Some(55_000));
+}
+
+#[test]
+fn starting_again_without_pausing_drops_unsaved_time() {
+  let dir = TempDir::new();
+  let (mut conn, session, t) = timed(&dir);
+  let mut clock = Clock::default();
+  clock.start(&mut conn, &session.id, t).unwrap();
+  clock.save(&mut conn, &session.id, after(t, 5.0)).unwrap();
+  let again = clock.start(&mut conn, &session.id, after(t, 30.0)).unwrap();
+  assert_eq!(again.remaining_ms, Some(55_000));
+}
+
+#[test]
+fn closing_the_app_saves_the_clock() {
+  let dir = TempDir::new();
+  let (mut conn, session, t) = timed(&dir);
+  let mut clock = Clock::default();
+  clock.pause_any(&mut conn, t).unwrap();
+  clock.start(&mut conn, &session.id, t).unwrap();
+  clock.pause_any(&mut conn, after(t, 7.0)).unwrap();
+  clock.pause_any(&mut conn, after(t, 9.0)).unwrap();
+  assert_eq!(active_ms(&conn, &session.id), 7_000);
+}
+
+#[test]
+fn untimed_sessions_count_time_but_never_end() {
+  let dir = TempDir::new();
+  let mut conn = database(&dir);
+  let session = start(&mut conn, Explanations::AtEnd);
+  let t = Instant::now();
+  let mut clock = Clock::default();
+  clock.require_time(&mut conn, &session.id, t).unwrap();
+  clock.start(&mut conn, &session.id, t).unwrap();
+  let reading = clock.save(&mut conn, &session.id, after(t, 90_000.0)).unwrap();
+  assert_eq!(reading, Reading { remaining_ms: None, ended: None });
+  assert_eq!(active_ms(&conn, &session.id), 90_000_000);
+}
+
+#[test]
+fn a_failed_save_at_the_limit_undoes_everything_and_can_be_repeated() {
+  let dir = TempDir::new();
+  let (mut conn, session, t) = timed(&dir);
+  let mut clock = Clock::default();
+  clock.start(&mut conn, &session.id, t).unwrap();
+  conn
+    .execute_batch(
+      "CREATE TEMP TRIGGER fail BEFORE INSERT ON main.attempts
+       BEGIN SELECT RAISE(ABORT, 'test'); END;",
+    )
+    .unwrap();
+  assert!(matches!(clock.save(&mut conn, &session.id, after(t, 61.0)), Err(PracticeError::Failed(_))));
+  let stored = load(&conn, &session.id).unwrap();
+  assert_eq!((stored.status, stored.active_ms), (Status::InProgress, 0));
+  assert!(clock.require_time(&mut conn, &session.id, after(t, 62.0)).is_err());
+  conn.execute_batch("DROP TRIGGER fail;").unwrap();
+  assert!(clock.save(&mut conn, &session.id, after(t, 62.0)).unwrap().ended.is_some());
+}
+
+#[test]
+fn a_failed_save_keeps_the_time_for_the_next_one() {
+  let dir = TempDir::new();
+  let (mut conn, session, t) = timed(&dir);
+  let mut clock = Clock::default();
+  clock.start(&mut conn, &session.id, t).unwrap();
+  conn
+    .execute_batch(
+      "CREATE TEMP TRIGGER fail BEFORE UPDATE ON main.practice_sessions
+       BEGIN SELECT RAISE(ABORT, 'test'); END;",
+    )
+    .unwrap();
+  assert!(clock.save(&mut conn, &session.id, after(t, 5.0)).is_err());
+  conn.execute_batch("DROP TRIGGER fail;").unwrap();
+  let reading = clock.save(&mut conn, &session.id, after(t, 8.0)).unwrap();
+  assert_eq!(reading.remaining_ms, Some(52_000));
+}
+
+#[test]
+fn a_clock_for_one_session_does_not_affect_another() {
+  let dir = TempDir::new();
+  let (mut conn, session, t) = timed(&dir);
+  let rc = Config {
+    section: Section::ReadingComprehension,
+    time_limit_seconds: Some(60),
+    ..config(Explanations::AtEnd, 1)
+  };
+  let other = create(&mut conn, &rc, &["test-rc-1".into()]).unwrap();
+  let mut clock = Clock::default();
+  clock.start(&mut conn, &session.id, t).unwrap();
+  clock.pause(&mut conn, &other.id, after(t, 10.0)).unwrap();
+  assert_eq!(active_ms(&conn, &other.id), 0);
+  clock.require_time(&mut conn, &session.id, after(t, 10.0)).unwrap();
+  assert_eq!(active_ms(&conn, &session.id), 10_000);
+}
+
+#[test]
+fn sessions_saved_before_timers_existed_are_untimed() {
+  let old = r#"{"section":"logical_reasoning","category_ids":[],"difficulties":[],"question_count":1,"explanations":"at_end"}"#;
+  assert_eq!(serde_json::from_str::<Config>(old).unwrap().time_limit_seconds, None);
 }

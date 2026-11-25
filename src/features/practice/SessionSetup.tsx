@@ -11,6 +11,7 @@ import { chooseQuestions } from '../../domain/practice/chooseQuestions'
 import { filterQuestions } from '../../domain/practice/filterQuestions'
 
 const MAX_QUESTIONS = 500
+const MAX_MINUTES = 360
 const DEFAULT_QUESTIONS = 10
 
 interface SessionSetupProps {
@@ -28,6 +29,8 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
   const total = filterQuestions(index.questions, inSection).length
   const [wanted, setWanted] = useState(String(Math.min(DEFAULT_QUESTIONS, total)))
   const [explanations, setExplanations] = useState<SessionConfig['explanations']>('after_each')
+  const [isTimed, setIsTimed] = useState(false)
+  const [minutes, setMinutes] = useState('15')
   const [error, setError] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)
 
@@ -47,7 +50,12 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
 
   const filter = { section, categoryIds, difficulties }
   const available = filterQuestions(index.questions, filter).length
-  const number = /^\d+$/.test(wanted) ? Number(wanted) : 0
+  const number = wholeNumber(wanted)
+  const limit = wholeNumber(minutes)
+  const timeProblem =
+    isTimed && (limit < 1 || limit > MAX_MINUTES)
+      ? `Enter a number of minutes from 1 to ${MAX_MINUTES}.`
+      : null
   const problem =
     number < 1 || number > MAX_QUESTIONS
       ? `Enter a number from 1 to ${MAX_QUESTIONS}.`
@@ -68,6 +76,7 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
         difficulties,
         question_count: number,
         explanations,
+        time_limit_seconds: isTimed ? limit * 60 : null,
       }
       onStarted(await practiceSession.create(config, chosen.ids))
     } catch (reason) {
@@ -83,7 +92,7 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
       className="space-y-8 rounded-2xl border border-line bg-surface p-8 shadow-card"
       onSubmit={(event) => {
         event.preventDefault()
-        if (problem === null) void start()
+        if (problem === null && timeProblem === null) void start()
       }}
     >
       <fieldset>
@@ -134,16 +143,54 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
         </div>
       </div>
       <fieldset>
+        <legend className="font-semibold">Time</legend>
+        <div className="mt-3 space-y-2">
+          <Check
+            type="radio"
+            name="timing"
+            label="Untimed"
+            checked={!isTimed}
+            onChange={() => setIsTimed(false)}
+          />
+          <Check
+            type="radio"
+            name="timing"
+            label="Timed"
+            checked={isTimed}
+            onChange={() => setIsTimed(true)}
+          />
+        </div>
+        {isTimed && (
+          <div className="mt-3 flex flex-wrap items-center gap-4">
+            <label htmlFor="minutes">Minutes</label>
+            <input
+              id="minutes"
+              inputMode="numeric"
+              value={minutes}
+              onChange={(event) => setMinutes(event.target.value)}
+              aria-describedby="minutes-help"
+              aria-invalid={timeProblem !== null}
+              className="w-24 rounded-lg border border-line bg-surface px-3 py-2"
+            />
+            <span id="minutes-help" role="status" className="text-sm text-muted">
+              {timeProblem ?? 'The timer pauses when you leave the session.'}
+            </span>
+          </div>
+        )}
+      </fieldset>
+      <fieldset>
         <legend className="font-semibold">Explanations</legend>
         <div className="mt-3 space-y-2">
           <Check
             type="radio"
+            name="explanations"
             label="After each question (checking an answer locks it)"
             checked={explanations === 'after_each'}
             onChange={() => setExplanations('after_each')}
           />
           <Check
             type="radio"
+            name="explanations"
             label="At the end (answers can change until you finish)"
             checked={explanations === 'at_end'}
             onChange={() => setExplanations('at_end')}
@@ -155,11 +202,15 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
           {error}
         </p>
       )}
-      <Button type="submit" disabled={problem !== null || isStarting}>
+      <Button type="submit" disabled={problem !== null || timeProblem !== null || isStarting}>
         Start Practice
       </Button>
     </form>
   )
+}
+
+function wholeNumber(text: string): number {
+  return /^\d+$/.test(text) ? Number(text) : 0
 }
 
 function toggle<T>(items: T[], item: T): T[] {
@@ -168,17 +219,18 @@ function toggle<T>(items: T[], item: T): T[] {
 
 interface CheckProps {
   type?: 'checkbox' | 'radio'
+  name?: string
   label: string
   checked: boolean
   onChange: () => void
 }
 
-function Check({ type = 'checkbox', label, checked, onChange }: CheckProps) {
+function Check({ type = 'checkbox', name, label, checked, onChange }: CheckProps) {
   return (
     <label className="flex cursor-pointer items-start gap-3">
       <input
         type={type}
-        name={type === 'radio' ? 'explanations' : undefined}
+        name={name}
         checked={checked}
         onChange={onChange}
         className="mt-1 size-4 shrink-0 accent-rose-accent"

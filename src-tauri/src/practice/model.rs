@@ -23,6 +23,9 @@ pub struct Config {
   pub difficulties: Vec<i64>,
   pub question_count: usize,
   pub explanations: Explanations,
+  /// Null or missing means untimed.
+  #[serde(default)]
+  pub time_limit_seconds: Option<i64>,
 }
 
 impl Config {
@@ -127,6 +130,8 @@ pub struct Session {
   pub config: Config,
   pub status: Status,
   pub current_position: i64,
+  /// Time the clock has run, as of the last save.
+  pub active_ms: i64,
   pub created_at: String,
   pub completed_at: Option<String>,
   pub questions: Vec<SessionQuestion>,

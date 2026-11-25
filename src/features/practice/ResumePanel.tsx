@@ -3,6 +3,7 @@ import { Button } from '../../components/Button'
 import { count } from '../../components/count'
 import { errorMessage } from '../../data/errorMessage'
 import { practiceSession, type Session } from '../../data/practiceSession'
+import { formatTime } from './formatTime'
 
 interface ResumePanelProps {
   session: Session
@@ -14,6 +15,7 @@ export function ResumePanel({ session, onResume, onEnded }: ResumePanelProps) {
   const [isConfirming, setIsConfirming] = useState(false)
   const [isEnding, setIsEnding] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const limit = session.config.time_limit_seconds
   const answered = session.questions.filter(({ selected }) => selected !== null).length
 
   async function end() {
@@ -41,6 +43,11 @@ export function ResumePanel({ session, onResume, onEnded }: ResumePanelProps) {
         {answered} of {count(session.questions.length, 'question')} answered, started{' '}
         {new Date(session.created_at).toLocaleString()}.
       </p>
+      {limit !== null && (
+        <p className="mt-1 text-muted">
+          {formatTime(Math.max(0, limit * 1000 - session.active_ms))} left. The timer is paused.
+        </p>
+      )}
       {isConfirming && (
         <p className="mt-3" role="status">
           End this session? Answers you already checked are kept. Other selected answers will not be

@@ -1,17 +1,20 @@
 //! The only operations the interface can ask for. Each also needs permission in
 //! capabilities/default.json. `async` keeps slow work from freezing the window.
 
-use std::sync::{Mutex, MutexGuard};
+use std::{
+  sync::{Mutex, MutexGuard},
+  time::Instant,
+};
 
 use rusqlite::Connection;
-use tauri::{Runtime, State, WebviewWindow, ipc::Response};
+use tauri::{AppHandle, Manager, Runtime, State, WebviewWindow, ipc::Response};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::{
   bank::{self, QuestionIndex},
   db::DbError,
   import::{self, Catalog, Entry, Plan, Session, package::{Label, Section}},
-  practice::{self, Config},
+  practice::{self, Clock, Config, Reading},
 };
 
 /// The open database, or the reason it could not be opened.
@@ -26,6 +29,10 @@ impl Database {
 /// The import in progress. When both are needed, lock this before the database.
 #[derive(Default)]
 pub struct CurrentImport(pub Mutex<Session>);
+
+/// The practice clock. When both are needed, lock this before the database.
+#[derive(Default)]
+pub struct SessionClock(Mutex<Clock>);
 
 fn lock<T>(mutex: &Mutex<T>) -> Result<MutexGuard<'_, T>, String> {
   mutex.lock().map_err(|_| "Something went wrong. Close LSAT Prep and open it again.".into())
@@ -153,8 +160,10 @@ pub fn create_session(
 pub fn select_answer(
   id: String,
   choice: Option<Label>,
+  clock: State<SessionClock>,
   database: State<Database>,
 ) -> Result<(), String> {
+  require_time(&clock, &database, &id)?;
   practice::select(&mut *database.get()?, &id, choice).map_err(text)
 }
 
@@ -182,16 +191,72 @@ pub fn set_session_position(
 }
 
 #[tauri::command(async)]
-pub fn submit_answer(id: String, database: State<Database>) -> Result<practice::Session, String> {
+pub fn submit_answer(
+  id: String,
+  clock: State<SessionClock>,
+  database: State<Database>,
+) -> Result<practice::Session, String> {
+  require_time(&clock, &database, &id)?;
   practice::submit(&mut *database.get()?, &id).map_err(text)
 }
 
 #[tauri::command(async)]
 pub fn finish_session(
   session_id: String,
+  clock: State<SessionClock>,
   database: State<Database>,
 ) -> Result<practice::Session, String> {
-  practice::finish(&mut *database.get()?, &session_id).map_err(text)
+  let mut clock = lock(&clock.0)?;
+  let mut conn = database.get()?;
+  let reading = clock.pause(&mut conn, &session_id, Instant::now()).map_err(text)?;
+  match reading.ended {
+    // Time ran out just before, or it was already finished.
+    Some(session) => Ok(session),
+    None => practice::finish(&mut conn, &session_id).map_err(text),
+  }
+}
+
+#[tauri::command(async)]
+pub fn start_clock(
+  session_id: String,
+  clock: State<SessionClock>,
+  database: State<Database>,
+) -> Result<Reading, String> {
+  lock(&clock.0)?.start(&mut *database.get()?, &session_id, Instant::now()).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn save_clock(
+  session_id: String,
+  clock: State<SessionClock>,
+  database: State<Database>,
+) -> Result<Reading, String> {
+  lock(&clock.0)?.save(&mut *database.get()?, &session_id, Instant::now()).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn pause_clock(
+  session_id: String,
+  clock: State<SessionClock>,
+  database: State<Database>,
+) -> Result<Reading, String> {
+  lock(&clock.0)?.pause(&mut *database.get()?, &session_id, Instant::now()).map_err(text)
+}
+
+/// Refuses an answer when time is up or the timer is paused.
+fn require_time(clock: &SessionClock, database: &Database, question: &str) -> Result<(), String> {
+  let mut clock = lock(&clock.0)?;
+  let mut conn = database.get()?;
+  let session_id = practice::session_of(&conn, question).map_err(text)?;
+  clock.require_time(&mut conn, &session_id, Instant::now()).map_err(text)
+}
+
+/// A normal close loses no clock time. Failure only loses time since the last save.
+pub fn save_clock_before_exit<R: Runtime>(app: &AppHandle<R>) {
+  let (clock, database) = (app.state::<SessionClock>(), app.state::<Database>());
+  if let (Ok(mut clock), Ok(mut conn)) = (lock(&clock.0), database.get()) {
+    let _ = clock.pause_any(&mut conn, Instant::now());
+  }
 }
 
 #[tauri::command(async)]
@@ -203,7 +268,6 @@ pub fn abandon_session(session_id: String, database: State<Database>) -> Result<
 mod tests {
   use serde_json::{Value, json};
   use tauri::{
-    Manager,
     ipc::{CallbackFn, InvokeBody},
     test::{INVOKE_KEY, MockRuntime, get_ipc_response, mock_builder},
     webview::InvokeRequest,
@@ -322,6 +386,45 @@ mod tests {
     assert_eq!(call("unfinished_session", section), Ok(Value::Null));
     let ended = call("abandon_session", json!({ "sessionId": id }));
     assert_eq!(ended, Err(json!("This practice session has ended.")));
+  }
+
+  #[test]
+  fn timed_answers_need_a_running_clock() {
+    let dir = TempDir::new();
+    let mut conn = db::open(&dir.0).unwrap();
+    let path = dir.0.join("package.json");
+    std::fs::write(&path, VALID).unwrap();
+    let mut import = Session::default();
+    import.choose(&conn, &path).unwrap();
+    import.preview(&mut conn).unwrap();
+    import.confirm(&mut conn).unwrap();
+    let app = app(Ok(conn));
+    let window = window(&app);
+    let call = |command: &str, body: Value| call(&window, command, body);
+    let config = json!({
+      "section": "logical_reasoning", "category_ids": [], "difficulties": [],
+      "question_count": 1, "explanations": "after_each", "time_limit_seconds": 60
+    });
+    let session =
+      call("create_session", json!({ "config": config, "questionIds": ["test-lr-1"] })).unwrap();
+    let id = json!({ "sessionId": session["id"] });
+    let answer = json!({ "id": session["questions"][0]["id"], "choice": "C" });
+
+    assert!(call("select_answer", answer.clone()).unwrap_err().to_string().contains("paused"));
+    assert_eq!(call("start_clock", id.clone()).unwrap()["remaining_ms"], 60_000);
+    assert_eq!(call("select_answer", answer.clone()), Ok(Value::Null));
+    assert_eq!(call("save_clock", id.clone()).unwrap()["ended"], Value::Null);
+    call("pause_clock", id.clone()).unwrap();
+    assert!(call("select_answer", answer.clone()).is_err());
+    assert!(call("submit_answer", json!({ "id": answer["id"] })).is_err());
+
+    // Closing the app saves a running clock, after which it is paused.
+    call("start_clock", id.clone()).unwrap();
+    save_clock_before_exit(app.handle());
+    assert!(call("select_answer", answer).unwrap_err().to_string().contains("paused"));
+    let done = call("finish_session", id.clone()).unwrap();
+    assert_eq!(done["questions"][0]["outcome"]["is_correct"], true);
+    assert_eq!(call("save_clock", id).unwrap()["ended"], done);
   }
 
   #[test]

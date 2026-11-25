@@ -1,10 +1,18 @@
 import { errorMessage } from '../../data/errorMessage'
-import type { PracticeSessionApi, Session, SessionQuestion } from '../../data/practiceSession'
+import type { ClockReading, PracticeSessionApi, Session, SessionQuestion } from '../../data/practiceSession'
 import type { ChoiceLabel } from '../../domain/content/types'
 
 type Api = Pick<
   PracticeSessionApi,
-  'select' | 'flag' | 'addTime' | 'setPosition' | 'submit' | 'finish'
+  | 'select'
+  | 'flag'
+  | 'addTime'
+  | 'setPosition'
+  | 'submit'
+  | 'finish'
+  | 'startClock'
+  | 'saveClock'
+  | 'pauseClock'
 >
 
 export interface SessionState {
@@ -16,6 +24,8 @@ export interface SessionState {
   /** Set while an answer or the whole session is being submitted. */
   isSubmitting: boolean
   error: { message: string; retry: () => void } | null
+  /** The last reading of the clock, and the local time it was taken. Null before it starts. */
+  clock: { remainingMs: number | null; readAt: number } | null
 }
 
 const MAX_SECONDS_PER_SAVE = 600
@@ -37,15 +47,19 @@ export class SessionController {
   private readonly beforeSubmit = new Set<() => void>()
 
   private readonly api: Api
+  private readonly now: () => number
+  private isClockWanted = false
 
-  constructor(api: Api, session: Session) {
+  constructor(api: Api, session: Session, now: () => number = () => performance.now()) {
     this.api = api
+    this.now = now
     this.state = {
       session,
       position: session.current_position,
       unsaved: new Set(),
       isSubmitting: false,
       error: null,
+      clock: null,
     }
     this.remember(session)
   }
@@ -136,10 +150,65 @@ export class SessionController {
       }
     })
 
+  /** Starts or resumes the clock. Timed answers are refused until it is running. */
+  readonly startClock = () => {
+    this.isClockWanted = true
+    const start = () => {
+      if (!this.isClockWanted || !this.isActive) return
+      void this.enqueue(async () => {
+        // Sent even if a pause is already waiting: answers queued in between need it.
+        this.readClock(await this.api.startClock(this.state.session.id))
+      }).catch((error) => {
+        if (this.isClockWanted) this.fail(error, start)
+      })
+    }
+    start()
+  }
+
+  /**
+   * Saves the clock, after any answers already waiting. The backend decides when time is
+   * up; a failure is tried again at the next save.
+   */
+  readonly saveClock = (): Promise<void> =>
+    this.enqueue(async () => {
+      if (!this.isClockWanted || !this.isActive || this.state.clock === null) return
+      this.readClock(await this.api.saveClock(this.state.session.id))
+    }).catch(() => {})
+
+  /** Pauses once everything already waiting is saved. */
+  readonly pauseClock = (): Promise<void> => {
+    this.isClockWanted = false
+    return this.enqueue(async () => {
+      if (this.isActive) await this.api.pauseClock(this.state.session.id)
+    }).catch(() => {})
+  }
+
+  /** Time left now, or null when untimed or not started. */
+  readonly getRemainingMs = (): number | null => {
+    const { clock } = this.state
+    if (clock === null || clock.remainingMs === null) return null
+    return Math.max(0, clock.remainingMs - (this.now() - clock.readAt))
+  }
+
   readonly dismissError = () => this.update({ error: null })
 
+  private get isActive() {
+    return this.state.session.status === 'in_progress'
+  }
+
   private get canChange() {
-    return !this.state.isSubmitting && this.state.session.status === 'in_progress'
+    return !this.state.isSubmitting && this.isActive
+  }
+
+  private readClock({ remaining_ms, ended }: ClockReading) {
+    if (ended !== null) {
+      this.remember(ended)
+      // Anything not saved in time is dropped, and its error would no longer matter.
+      this.latest.clear()
+      this.update({ session: ended, unsaved: new Set(), isSubmitting: false, error: null })
+    } else {
+      this.update({ clock: { remainingMs: remaining_ms, readAt: this.now() } })
+    }
   }
 
   private change<K extends 'selected' | 'is_flagged'>(
@@ -161,6 +230,7 @@ export class SessionController {
     })
       .catch((error) => {
         if (this.latest.get(key) !== number) return
+        void this.saveClock() // the answer may have been refused because time is up
         this.show(id, { [field]: this.saved.get(id)![field] })
         this.fail(error, () => {
           if (this.canChange) this.change(id, field, value, save)
@@ -189,12 +259,14 @@ export class SessionController {
       this.update({ isSubmitting: false })
       return
     }
+    if (!this.isActive) return // time ran out first
     try {
       const session = await this.enqueue(send)
       this.remember(session)
       this.update({ session, isSubmitting: false })
     } catch (error) {
       this.update({ isSubmitting: false })
+      void this.saveClock()
       this.fail(error, retry)
     }
   }
@@ -222,6 +294,7 @@ export class SessionController {
   }
 
   private fail(error: unknown, retry: () => void) {
+    if (!this.isActive) return
     const message = errorMessage(error, 'Your work could not be saved.')
     this.update({
       error: {

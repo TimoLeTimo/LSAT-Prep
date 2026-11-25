@@ -6,15 +6,16 @@ mod practice;
 
 use std::sync::Mutex;
 
-use tauri::{Builder, Manager, Runtime};
+use tauri::{Builder, Manager, RunEvent, Runtime};
 
-use commands::{CurrentImport, Database};
+use commands::{CurrentImport, Database, SessionClock};
 
 /// Everything the real app and the command tests share.
 fn configure<R: Runtime>(builder: Builder<R>) -> Builder<R> {
   builder
     .plugin(tauri_plugin_dialog::init())
     .manage(CurrentImport::default())
+    .manage(SessionClock::default())
     .invoke_handler(tauri::generate_handler![
       commands::database_status,
       commands::question_index,
@@ -36,6 +37,9 @@ fn configure<R: Runtime>(builder: Builder<R>) -> Builder<R> {
       commands::submit_answer,
       commands::finish_session,
       commands::abandon_session,
+      commands::start_clock,
+      commands::save_clock,
+      commands::pause_clock,
     ])
 }
 
@@ -49,6 +53,11 @@ pub fn run() {
       app.manage(Database(database));
       Ok(())
     })
-    .run(tauri::generate_context!())
-    .expect("error while running LSAT Prep");
+    .build(tauri::generate_context!())
+    .expect("error while starting LSAT Prep")
+    .run(|app, event| {
+      if let RunEvent::Exit = event {
+        commands::save_clock_before_exit(app);
+      }
+    });
 }

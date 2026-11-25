@@ -10,6 +10,8 @@ export interface SessionConfig {
   difficulties: Difficulty[]
   question_count: number
   explanations: 'after_each' | 'at_end'
+  /** Null means untimed. */
+  time_limit_seconds: number | null
 }
 
 export interface Outcome {
@@ -40,9 +42,18 @@ export interface Session {
   config: SessionConfig
   status: 'in_progress' | 'completed' | 'abandoned'
   current_position: number
+  /** Time the clock has run, as of the last save. */
+  active_ms: number
   created_at: string
   completed_at: string | null
   questions: SessionQuestion[]
+}
+
+export interface ClockReading {
+  /** Null when the session has no time limit. */
+  remaining_ms: number | null
+  /** The final session, once it has ended. */
+  ended: Session | null
 }
 
 /** Each call rejects with a message that can be shown to the user. */
@@ -57,6 +68,9 @@ export const practiceSession = {
     invoke<void>('set_session_position', { sessionId, position }),
   submit: (id: string) => invoke<Session>('submit_answer', { id }),
   finish: (sessionId: string) => invoke<Session>('finish_session', { sessionId }),
+  startClock: (sessionId: string) => invoke<ClockReading>('start_clock', { sessionId }),
+  saveClock: (sessionId: string) => invoke<ClockReading>('save_clock', { sessionId }),
+  pauseClock: (sessionId: string) => invoke<ClockReading>('pause_clock', { sessionId }),
   abandon: (sessionId: string) => invoke<void>('abandon_session', { sessionId }),
 }
 

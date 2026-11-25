@@ -4,6 +4,8 @@ use rusqlite::{Connection, params};
 
 use super::{test_support::TempDir, *};
 
+const LATEST: i64 = migrations::ALL.len() as i64;
+
 fn count(conn: &Connection, table: &str) -> i64 {
   conn.query_row(&format!("SELECT count(*) FROM {table}"), [], |row| row.get(0)).unwrap()
 }
@@ -90,7 +92,7 @@ fn upgrade_keeps_data_and_backs_up_first() {
   drop(database_with_attempt(&dir));
   let next = [migrations::ALL, &["CREATE TABLE added (x TEXT) STRICT;"]].concat();
   let conn = open_with(&dir.0, &next).unwrap();
-  assert_eq!(migrations::version(&conn).unwrap(), 2);
+  assert_eq!(migrations::version(&conn).unwrap(), LATEST + 1);
   assert_eq!(count(&conn, "attempts"), 1);
   assert_eq!(count(&conn, "added"), 0);
 
@@ -98,7 +100,7 @@ fn upgrade_keeps_data_and_backs_up_first() {
   assert_eq!(backups.len(), 1);
   assert_eq!(backups[0].extension().unwrap(), "db");
   let backup = Connection::open(&backups[0]).unwrap();
-  assert_eq!(migrations::version(&backup).unwrap(), 1);
+  assert_eq!(migrations::version(&backup).unwrap(), LATEST);
   assert_eq!(count(&backup, "attempts"), 1);
 }
 
@@ -125,7 +127,7 @@ fn a_failed_upgrade_changes_nothing() {
   assert!(open_with(&dir.0, &bad).is_err());
 
   let conn = open(&dir.0).unwrap();
-  assert_eq!(migrations::version(&conn).unwrap(), 1);
+  assert_eq!(migrations::version(&conn).unwrap(), LATEST);
   assert_eq!(count(&conn, "attempts"), 1);
   let added: i64 = conn
     .query_row("SELECT count(*) FROM sqlite_schema WHERE name = 'added'", [], |row| row.get(0))
@@ -148,7 +150,25 @@ fn no_upgrade_without_a_backup() {
   let next = [migrations::ALL, &["CREATE TABLE added (x TEXT);"]].concat();
   assert!(message(open_with(&dir.0, &next)).contains("update was not started"));
   fs::remove_file(dir.0.join("backups")).unwrap();
-  assert_eq!(migrations::version(&open(&dir.0).unwrap()).unwrap(), 1);
+  assert_eq!(migrations::version(&open(&dir.0).unwrap()).unwrap(), LATEST);
+}
+
+#[test]
+fn upgrades_every_released_version_and_keeps_its_data() {
+  for released in 1..migrations::ALL.len() {
+    let dir = TempDir::new();
+    let mut conn = open_with(&dir.0, &migrations::ALL[..released]).unwrap();
+    add_question(&mut conn, "q1").unwrap();
+    add_attempt(&conn);
+    drop(conn);
+    let conn = open(&dir.0).unwrap();
+    assert_eq!(migrations::version(&conn).unwrap(), LATEST);
+    assert_eq!((count(&conn, "attempts"), count(&conn, "session_questions")), (1, 1));
+    let active: i64 =
+      conn.query_row("SELECT active_ms FROM practice_sessions", [], |row| row.get(0)).unwrap();
+    assert_eq!(active, 0);
+    assert_eq!(dir.backups().len(), 1);
+  }
 }
 
 // ---------------------------------------------------------------- Files it must refuse

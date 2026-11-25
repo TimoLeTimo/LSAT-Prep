@@ -21,6 +21,9 @@ fn main() {
     "submit_answer",
     "finish_session",
     "abandon_session",
+    "start_clock",
+    "save_clock",
+    "pause_clock",
   ]);
   tauri_build::try_build(tauri_build::Attributes::new().app_manifest(commands))
     .expect("failed to prepare the Tauri build");

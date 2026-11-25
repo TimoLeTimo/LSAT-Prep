@@ -25,6 +25,9 @@
     "allow-set-session-position",
     "allow-submit-answer",
     "allow-finish-session",
-    "allow-abandon-session"
+    "allow-abandon-session",
+    "allow-start-clock",
+    "allow-save-clock",
+    "allow-pause-clock"
   ]
 }

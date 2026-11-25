@@ -19,7 +19,11 @@ The exact tables are in `src-tauri/migrations/`; those files are authoritative. 
   - Answers are marked against the saved copy. The interface receives the key and explanations only after an answer is submitted or the session is finished.
   - One targeted session per section can be unfinished at a time.
 - Content with history or bookmarks cannot be deleted. Retire it instead.
-- Section timer fields will be added by a later migration when timed practice is built.
+- The session clock runs in Rust (`practice/clock.rs`) while the practice screen is open, and `active_ms` stores the time it has run.
+  - It pauses when the user leaves the screen or closes the app, but not when the window is hidden. It relies on a system clock that should stop during sleep.
+  - It is saved every 5 seconds, with each answer, and on a normal close. An abrupt quit can give back up to about 5 seconds.
+  - At the limit, saved answers are submitted and the session ends in one transaction. Later answers are refused.
+  - Practice-test simulations (Milestone 6) may need different pause rules and section timers.
 
 ## 1. Core content tables
 
@@ -70,6 +74,7 @@ The exact tables are in `src-tauri/migrations/`; those files are authoritative. 
 - `status` — in_progress, completed, abandoned.
 - `started_at`, `completed_at`.
 - `time_limit_seconds` — nullable.
+- `active_ms` — time the clock has run, not counting pauses.
 - `created_at`.
 
 ### `session_questions`

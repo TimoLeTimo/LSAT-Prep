@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-clock"
+description = "Enables the save_clock command without any pre-configured scope."
+commands.allow = ["save_clock"]
+
+[[permission]]
+identifier = "deny-save-clock"
+description = "Denies the save_clock command without any pre-configured scope."
+commands.deny = ["save_clock"]

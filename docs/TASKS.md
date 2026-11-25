@@ -53,7 +53,7 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [x] Question display.
 - [x] Answer selection.
 - [x] Next/previous navigation.
-- [ ] Timer.
+- [ ] Timer. (Built; real-window and sleep checks remain.)
 - [ ] Bookmarking.
 - [ ] Explanations.
 - [ ] Autosave and session recovery. (Built; real-window check remains.)

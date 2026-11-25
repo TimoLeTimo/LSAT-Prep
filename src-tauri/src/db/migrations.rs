@@ -7,7 +7,10 @@ use rusqlite::{Connection, TransactionBehavior, backup::Backup};
 use super::{APPLICATION_ID, DbError};
 
 /// Add new migrations at the end. Never edit or reorder released ones.
-pub const ALL: &[&str] = &[include_str!("../../migrations/0001_initial.sql")];
+pub const ALL: &[&str] = &[
+  include_str!("../../migrations/0001_initial.sql"),
+  include_str!("../../migrations/0002_session_clock.sql"),
+];
 
 pub fn version(conn: &Connection) -> Result<i64, DbError> {
   Ok(conn.query_row("PRAGMA user_version", [], |row| row.get(0))?)

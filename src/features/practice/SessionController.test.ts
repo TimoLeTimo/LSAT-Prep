@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest'
-import type { Session } from '../../data/practiceSession'
+import type { ClockReading, Session } from '../../data/practiceSession'
 import { SessionController } from './SessionController'
 import { testSession } from './testSession'
 
@@ -25,6 +25,10 @@ function setup(session: Session = testSession()) {
     log.push(`${name} ${id}`)
     return { ...session, status: name === 'finish' ? 'completed' : 'in_progress' } as Session
   }
+  const reading = (name: string) => async (): Promise<ClockReading> => {
+    log.push(name)
+    return { remaining_ms: 60_000, ended: null }
+  }
   const api = {
     select: vi.fn(record('select')),
     flag: vi.fn(record('flag')),
@@ -32,9 +36,13 @@ function setup(session: Session = testSession()) {
     setPosition: vi.fn(record('position')),
     submit: vi.fn(result('submit')),
     finish: vi.fn(result('finish')),
+    startClock: vi.fn(reading('start')),
+    saveClock: vi.fn(reading('save')),
+    pauseClock: vi.fn(reading('pause')),
   }
-  const controller = new SessionController(api, session)
-  return { api, log, controller, get state() { return controller.getState() } }
+  const time = { now: 0 }
+  const controller = new SessionController(api, session, () => time.now)
+  return { api, log, controller, time, get state() { return controller.getState() } }
 }
 
 it('saves a selection and shows when it is saved', async () => {
@@ -280,4 +288,117 @@ it('counts the final seconds before submitting', async () => {
   test.controller.select('B')
   await test.controller.submit()
   expect(test.log.slice(3)).toEqual(['select a B', 'submit a'])
+})
+
+// Clock
+
+const completed = (): Session => ({ ...testSession(), status: 'completed' })
+
+it('shows the time left between readings', async () => {
+  const test = setup()
+  expect(test.controller.getRemainingMs()).toBeNull()
+  test.time.now = 1000
+  test.controller.startClock()
+  await tick()
+  expect(test.controller.getRemainingMs()).toBe(60_000)
+  test.time.now = 11_000
+  expect(test.controller.getRemainingMs()).toBe(50_000)
+  test.time.now = 100_000
+  expect(test.controller.getRemainingMs()).toBe(0)
+})
+
+it('trusts the backend over local time, such as after the computer sleeps', async () => {
+  const test = setup()
+  test.controller.startClock()
+  await tick()
+  test.time.now = 3_600_000
+  test.api.saveClock.mockResolvedValueOnce({ remaining_ms: 58_000, ended: null })
+  await test.controller.saveClock()
+  expect(test.controller.getRemainingMs()).toBe(58_000)
+  expect(test.state.session.status).toBe('in_progress')
+})
+
+it('sends waiting answers before checking whether time is up', async () => {
+  const test = setup()
+  test.controller.startClock()
+  test.controller.select('B')
+  test.api.saveClock.mockImplementationOnce(async () => {
+    test.log.push('save')
+    return { remaining_ms: 0, ended: completed() }
+  })
+  await test.controller.saveClock()
+  expect(test.log).toEqual(['start', 'select a B', 'save'])
+  expect(test.state).toMatchObject({ session: { status: 'completed' }, error: null })
+})
+
+it('shows the results when an answer is refused because time is up', async () => {
+  const test = setup()
+  test.controller.startClock()
+  await tick()
+  test.api.select.mockRejectedValueOnce('Time is up.')
+  test.api.saveClock.mockResolvedValueOnce({ remaining_ms: null, ended: completed() })
+  test.controller.select('B')
+  await tick()
+  expect(test.state).toMatchObject({ session: { status: 'completed' }, error: null })
+  expect(test.state.session.questions[0].selected).toBeNull()
+  expect(test.state.unsaved.size).toBe(0)
+})
+
+it.each(['submit', 'finish'] as const)('does not %s again if time runs out first', async (action) => {
+  const test = setup()
+  test.controller.startClock()
+  test.controller.select('B')
+  test.api.saveClock.mockResolvedValueOnce({ remaining_ms: null, ended: completed() })
+  const saving = test.controller.saveClock()
+  await Promise.all([test.controller[action](), saving])
+  expect(test.api[action]).not.toHaveBeenCalled()
+  expect(test.state).toMatchObject({ isSubmitting: false, error: null })
+})
+
+it('reports a clock that cannot start, and can try again', async () => {
+  const test = setup()
+  test.api.startClock.mockRejectedValueOnce('Failed.')
+  test.controller.startClock()
+  await tick()
+  expect(test.state.error?.message).toBe('Failed.')
+  test.state.error!.retry()
+  await tick()
+  expect(test.state.error).toBeNull()
+  expect(test.controller.getRemainingMs()).toBe(60_000)
+})
+
+it('keeps going quietly when a clock save fails', async () => {
+  const test = setup()
+  test.controller.startClock()
+  await tick()
+  test.api.saveClock.mockRejectedValueOnce('Failed.')
+  await test.controller.saveClock()
+  expect(test.state.error).toBeNull()
+  await test.controller.saveClock()
+  expect(test.api.saveClock).toHaveBeenCalledTimes(2)
+})
+
+it('pauses after waiting answers, and does not save while paused', async () => {
+  const test = setup()
+  test.controller.startClock()
+  test.controller.select('B')
+  await test.controller.pauseClock()
+  await test.controller.saveClock()
+  expect(test.log).toEqual(['start', 'select a B', 'pause'])
+})
+
+it('ends up running when the screen closes and reopens at once', async () => {
+  const test = setup()
+  test.controller.startClock()
+  void test.controller.pauseClock()
+  test.controller.startClock()
+  await tick()
+  expect(test.log.at(-1)).toBe('start')
+})
+
+it('does not start the clock of a session that has ended', async () => {
+  const test = setup(completed())
+  test.controller.startClock()
+  await test.controller.pauseClock()
+  expect(test.log).toEqual([])
 })

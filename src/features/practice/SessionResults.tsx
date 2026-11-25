@@ -11,6 +11,8 @@ export function SessionResults({ session, onDone }: { session: Session; onDone: 
     heading.current?.focus()
   }, [])
 
+  const limit = session.config.time_limit_seconds
+  const ranOut = limit !== null && session.active_ms >= limit * 1000
   const { correct, answered, unanswered } = score(session.questions)
   return (
     <div className="mx-auto max-w-3xl">
@@ -23,6 +25,9 @@ export function SessionResults({ session, onDone }: { session: Session; onDone: 
             ? 'No questions were answered.'
             : `${correct} of ${count(answered, 'answered question')} correct`}
         </p>
+        {ranOut && (
+          <p className="mt-1 text-muted">Time ran out. Your saved answers were submitted.</p>
+        )}
         {unanswered > 0 && answered > 0 && (
           <p className="mt-1 text-muted">{count(unanswered, 'question')} not answered</p>
         )}
