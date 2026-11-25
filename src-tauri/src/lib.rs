@@ -1,4 +1,7 @@
 mod db;
+// Connected to the interface in Milestone 2 part 4b.
+#[cfg_attr(not(test), allow(dead_code, unused_imports))]
+mod import;
 
 use std::sync::Mutex;
 

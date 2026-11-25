@@ -1,39 +1,8 @@
-use std::{
-  fs,
-  path::PathBuf,
-  sync::atomic::{AtomicU32, Ordering},
-};
+use std::fs;
 
 use rusqlite::{Connection, params};
 
-use super::*;
-
-/// A temporary folder, removed when the test ends.
-struct TempDir(PathBuf);
-
-impl TempDir {
-  fn new() -> Self {
-    static NEXT: AtomicU32 = AtomicU32::new(0);
-    let number = NEXT.fetch_add(1, Ordering::Relaxed);
-    let path = std::env::temp_dir().join(format!("lsat-prep-test-{}-{number}", std::process::id()));
-    fs::create_dir(&path).unwrap();
-    TempDir(path)
-  }
-  fn file(&self) -> PathBuf {
-    self.0.join(FILE_NAME)
-  }
-  fn backups(&self) -> Vec<PathBuf> {
-    fs::read_dir(self.0.join("backups"))
-      .map(|entries| entries.map(|entry| entry.unwrap().path()).collect())
-      .unwrap_or_default()
-  }
-}
-
-impl Drop for TempDir {
-  fn drop(&mut self) {
-    let _ = fs::remove_dir_all(&self.0);
-  }
-}
+use super::{test_support::TempDir, *};
 
 fn count(conn: &Connection, table: &str) -> i64 {
   conn.query_row(&format!("SELECT count(*) FROM {table}"), [], |row| row.get(0)).unwrap()

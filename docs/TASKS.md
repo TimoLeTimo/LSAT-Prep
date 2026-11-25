@@ -35,11 +35,11 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [ ] Add Settings → Question Bank Management.
 - [ ] Add Import Questions local file picker.
 - [ ] Build validation feedback and package preview.
-- [ ] Detect duplicate package versions and content IDs.
-- [ ] Require confirmation; import approved questions only.
-- [ ] Implement atomic SQLite import transaction and rollback tests.
-- [ ] Add content package registry and import history.
-- [ ] Verify imports do not change attempts, bookmarks, sessions, or statistics.
+- [x] Detect duplicate package versions and content IDs.
+- [ ] Require confirmation; import approved questions only. (Engine rules done; confirmation screen remains.)
+- [x] Implement atomic SQLite import transaction and rollback tests.
+- [ ] Add content package registry and import history. (Storage done; history screen remains.)
+- [x] Verify imports do not change attempts, bookmarks, sessions, or statistics.
 - [ ] Create small original seed question set.
 
 ## Milestone 3 — Logical Reasoning

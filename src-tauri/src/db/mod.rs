@@ -3,6 +3,8 @@
 mod error;
 mod migrations;
 #[cfg(test)]
+pub mod test_support;
+#[cfg(test)]
 mod tests;
 
 use std::{fs, path::Path, time::Duration};

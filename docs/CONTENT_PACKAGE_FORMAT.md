@@ -90,6 +90,26 @@ happened or that content is original. Those remain human responsibilities.
 | Notes, descriptions, sources, licenses | 4,000 characters |
 | Errors listed | First 500, plus a total count |
 
-## Known limitation
-If one JSON object repeats the same field name, standard JSON parsing keeps the last value.
-The validator cannot detect the earlier one.
+## Import rules
+The import engine is in `src-tauri/src/import/`. It reads the file again with its own strict
+checks, separate from the validator above.
+
+| Situation | Result |
+|---|---|
+| Same `package_id` and `package_version` already imported | Package refused |
+| Item ID already in the app, identical content | Item skipped |
+| Item ID already in the app, different content | Package refused |
+| No new questions | Package refused |
+| New question needs a missing or retired passage, or a missing category | Package refused |
+| File or question bank differs from the confirmed preview | Nothing imported; preview again |
+| Any write fails | Everything undone |
+
+Comparison covers every field except which package an item came from and its current status in
+the app, so a retired question stays retired. Tag order does not matter. A category whose name,
+description, or order differs counts as different content.
+
+Confirmed imports are always recorded in the import history, whatever the outcome. Files that
+fail validation are recorded without any of their content.
+
+A field that appears twice in one JSON object is refused by the import engine. The TypeScript
+validator cannot detect this, because standard JSON parsing keeps only the last value.
