@@ -22,3 +22,12 @@ was later changed or retired.
 - A question answered for the first time in Review, such as a bookmarked one, is not a retry.
 - The average time of an answer stops at submission. It leaves out time with the window hidden.
 - No scaled score is given.
+- "Few answers" marks accuracy from fewer than 10 answers, and "Few questions" a test with fewer than
+  10 scored questions.
+
+## Filters
+- The period is the last 30 or 90 times 24 hours, by when an answer was submitted and when a session
+  ended. A session and its answers can therefore fall on different sides of the limit.
+- A section keeps its own answers, wherever they were given. Tests and other sessions that mix
+  sections stay in their lists with all of their answers. Practice time is then not shown, because it
+  cannot be divided by section.

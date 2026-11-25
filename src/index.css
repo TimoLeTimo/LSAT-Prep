@@ -11,6 +11,9 @@
   --color-blush: #f9ecee;
   --color-rose-accent: #b4475f;
   --color-rose-deep: #8f2f47;
+  /* Charts: the empty part of a bar, and bars that are not the main point. */
+  --color-rose-track: #f1d9de;
+  --color-bar: #8f8288;
 
   /* System fonts only, so nothing is downloaded at runtime. */
   --font-sans: ui-sans-serif, -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;

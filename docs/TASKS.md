@@ -97,11 +97,11 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [x] Incorrect question review.
 - [x] Bookmark review.
 - [x] Retry workflow.
-- [ ] Summary statistics.
-- [ ] LR/RC comparison.
-- [ ] Category/difficulty breakdown.
-- [ ] Historical trends.
-- [ ] Practice test history.
+- [x] Summary statistics.
+- [x] LR/RC comparison.
+- [x] Category/difficulty breakdown.
+- [x] Historical trends.
+- [x] Practice test history.
 
 ## Milestone 8 — Reliability
 - [x] Offline test.
