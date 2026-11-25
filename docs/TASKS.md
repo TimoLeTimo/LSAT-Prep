@@ -40,7 +40,11 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [x] Implement atomic SQLite import transaction and rollback tests.
 - [x] Add content package registry and import history.
 - [x] Verify imports do not change attempts, bookmarks, sessions, or statistics.
-- [ ] Create small original seed question set.
+- [x] Add category and difficulty filters.
+- [x] Create content QA checklist.
+- [ ] Confirm in the real window that re-importing a package is blocked and recorded.
+- [x] Draft small original seed question set.
+- [ ] Review, approve, and import the seed question set.
 
 ## Milestone 3 — Logical Reasoning
 - [ ] Question display.

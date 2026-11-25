@@ -8,6 +8,7 @@ use tauri::{Runtime, State, WebviewWindow, ipc::Response};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::{
+  bank::{self, QuestionIndex},
   db::DbError,
   import::{self, Catalog, Entry, Plan, Session},
 };
@@ -44,6 +45,11 @@ pub fn database_status(database: State<Database>) -> Result<(), String> {
     .get()?
     .query_row("SELECT 1 FROM question_categories LIMIT 1", [], |_| Ok(()))
     .map_err(db_text)
+}
+
+#[tauri::command(async)]
+pub fn question_index(database: State<Database>) -> Result<QuestionIndex, String> {
+  bank::index(&*database.get()?).map_err(db_text)
 }
 
 #[tauri::command(async)]
@@ -186,6 +192,8 @@ mod tests {
     let plan = call(&window, "preview_package", json!({})).unwrap();
     assert_eq!(plan["questions"]["new"], json!(["test-lr-1", "test-rc-1"]));
     assert_eq!(call(&window, "confirm_import", json!({})).unwrap(), plan);
+    let index = call(&window, "question_index", json!({})).unwrap();
+    assert_eq!(index["questions"].as_array().unwrap().len(), 2);
     let history = call(&window, "import_history", json!({})).unwrap();
     assert_eq!(history[0]["status"], "succeeded");
     assert!(call(&window, "confirm_import", json!({})).is_err());
@@ -208,7 +216,7 @@ mod tests {
   fn every_command_reports_an_unavailable_database() {
     let app = app(Err("The data file is damaged.".into()));
     let window = window(&app);
-    for command in ["database_status", "import_catalog", "import_history", "preview_package", "confirm_import"] {
+    for command in ["database_status", "question_index", "import_catalog", "import_history", "preview_package", "confirm_import"] {
       assert_eq!(call(&window, command, json!({})), Err(json!("The data file is damaged.")));
     }
   }

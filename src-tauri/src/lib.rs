@@ -1,3 +1,4 @@
+mod bank;
 mod commands;
 mod db;
 mod import;
@@ -15,6 +16,7 @@ fn configure<R: Runtime>(builder: Builder<R>) -> Builder<R> {
     .manage(CurrentImport::default())
     .invoke_handler(tauri::generate_handler![
       commands::database_status,
+      commands::question_index,
       commands::import_catalog,
       commands::import_history,
       commands::choose_package,
