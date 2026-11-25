@@ -1,9 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "No native permissions yet; add only what a feature needs.",
+  "description": "Only the operations the interface needs.",
   "windows": [
     "main"
   ],
-  "permissions": []
+  "permissions": [
+    "allow-database-status"
+  ]
 }

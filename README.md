@@ -1,6 +1,6 @@
 # LSAT Prep
 
-An offline-first LSAT-style practice app for macOS. The visual shell is in place; practice features are not built yet.
+An offline-first LSAT-style practice app for macOS. The visual shell and database are in place; practice features are not built yet.
 Product requirements are in [docs/](docs/README.md).
 
 ## Requirements
@@ -36,7 +36,8 @@ http://localhost:5173. Port 5173 must be free; do not run both commands at once.
 
 ```bash
 npm run build     # type-check and create a production build in dist/
-npm test          # run the automated tests
+npm test          # run the TypeScript tests
+npm run test:rust # run the database tests
 npm run lint      # check the code for common mistakes
 npm run tauri -- build --debug --no-bundle   # desktop test build, no installer
 npm run preview   # serve the production build locally (run build first)
@@ -45,7 +46,8 @@ npm run preview   # serve the production build locally (run build first)
 ## Stack
 
 React, TypeScript, and Vite, with Tailwind CSS through the `@tailwindcss/vite` plugin,
-in a Tauri 2 desktop window. SQLite is planned for Milestone 2.
+in a Tauri 2 desktop window. Data is stored in SQLite by the Rust code in `src-tauri/src/db/`.
+The browser version (`npm run dev`) has no database.
 
 ## Disclaimer
 

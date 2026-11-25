@@ -1,6 +1,18 @@
 # Database Schema — Initial Design
 
-This is a conceptual schema for planning. Final SQL should be written only after the entities and workflows are reviewed. Use migrations from the beginning.
+The exact tables are in `src-tauri/migrations/`; those files are authoritative. This document explains the intent.
+
+## Implementation decisions
+- The Rust layer in `src-tauri/src/db/` owns the database through `rusqlite` with bundled SQLite. The interface calls specific commands and never sends SQL. Application rules stay in TypeScript.
+- Migrations are numbered files that are never edited after release. Missing migrations run in one transaction, so either all succeed or none do.
+- An existing database is backed up and the copy checked before an upgrade. If the backup fails, the upgrade does not start. Backups are in the `backups` folder beside the database and are not deleted automatically.
+- The app refuses a database that is damaged, from a newer version, or from another program, and shows an error instead of resetting it.
+- The app data folder is chosen by the operating system for `com.lsatprep.desktop`. While the app is open, recent changes may be in `lsat-prep.db-wal`, so do not copy `lsat-prep.db` alone.
+- Passage texts are in `passage_texts`, tags in `question_tags`, and provenance and review data in JSON columns. Content rows name the package they came from.
+- Each session question stores a full copy of the question and passage as shown. The copy cannot be changed.
+- One attempt is recorded when a question is submitted, and it cannot be changed. Before that, changing a selection only updates the saved session.
+- Content with history or bookmarks cannot be deleted. Retire it instead.
+- Section timer fields will be added by a later migration when timed practice is built.
 
 ## 1. Core content tables
 
@@ -62,7 +74,7 @@ This is a conceptual schema for planning. Final SQL should be written only after
 - `is_flagged`.
 - `answered_at`.
 - `time_spent_seconds`.
-- `question_content_snapshot` or content version reference, to preserve the exact content shown during the attempt.
+- `content_snapshot_json` — full copy of the content shown.
 
 ### `attempts`
 Use a durable attempt record for each submitted answer/retry. Fields:
@@ -75,7 +87,7 @@ Use a durable attempt record for each submitted answer/retry. Fields:
 - `attempted_at`.
 - `attempt_kind` — original, retry, review.
 
-Do not treat opening a question as an answered attempt. Define whether answer changes create one final attempt or a separate event history; keep the initial implementation simple and documented.
+Do not treat opening a question as an answered attempt. `session_question_id` links each attempt to the content shown.
 
 ### `bookmarks`
 - `id`.
