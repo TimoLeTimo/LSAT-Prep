@@ -36,6 +36,7 @@ http://localhost:5173. Port 5173 must be free; do not run both commands at once.
 
 ```bash
 npm run build     # type-check and create a production build in dist/
+npm test          # run the automated tests
 npm run lint      # check the code for common mistakes
 npm run tauri -- build --debug --no-bundle   # desktop test build, no installer
 npm run preview   # serve the production build locally (run build first)

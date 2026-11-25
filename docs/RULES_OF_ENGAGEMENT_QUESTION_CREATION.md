@@ -314,16 +314,17 @@ Every approved question must be stored with at least:
 {
   "id": "lr-strengthen-000001",
   "section": "logical_reasoning",
-  "primary_category": "strengthen",
+  "primary_category": "lr-strengthen",
   "secondary_tags": ["causal_reasoning"],
   "difficulty": 2,
-  "prompt": "Original question stem and stimulus...",
+  "stimulus": "Original argument or statements...",
+  "prompt": "Original question stem...",
   "choices": [
-    {"label": "A", "text": "Choice text..."},
-    {"label": "B", "text": "Choice text..."},
-    {"label": "C", "text": "Choice text..."},
-    {"label": "D", "text": "Choice text..."},
-    {"label": "E", "text": "Choice text..."}
+    {"label": "A", "text": "Choice A text..."},
+    {"label": "B", "text": "Choice B text..."},
+    {"label": "C", "text": "Choice C text..."},
+    {"label": "D", "text": "Choice D text..."},
+    {"label": "E", "text": "Choice E text..."}
   ],
   "correct_choice": "C",
   "explanations": {
@@ -339,7 +340,8 @@ Every approved question must be stored with at least:
   "provenance": {
     "origin": "original_ai_assisted_human_reviewed",
     "source_material_used": "No official question text or passage used",
-    "authoring_batch": "2026-11-lr-strengthen-01"
+    "authoring_batch": "2026-11-lr-strengthen-01",
+    "license_reference": null
   },
   "quality": {
     "draft_status": "approved",
@@ -351,7 +353,7 @@ Every approved question must be stored with at least:
 }
 ```
 
-This is an illustrative schema. Adapt field names to the app's final database design. Store passages separately and reference them by stable ID. Keep a separate change log for revisions.
+The exact import format is in `CONTENT_PACKAGE_FORMAT.md`. Store passages separately and reference them by stable ID. Keep a separate change log for revisions.
 
 ---
 

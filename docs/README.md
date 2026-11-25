@@ -49,6 +49,7 @@ When ready to begin on Linux, follow `START_HERE_FIRST_SESSION.md`. It contains 
 5. `IMPLEMENTATION_ROADMAP.md`
 6. `OFFICIAL_LSAT_PRACTICE_TEST_DIRECTORY.md`
 7. `RULES_OF_ENGAGEMENT_QUESTION_CREATION.md`
+8. `CONTENT_PACKAGE_FORMAT.md`
 9. `AI_HANDOFF_PROMPT.md`
 
 This documentation describes the intended product. It is not authorization to generate the entire application in one shot. Implement in small, reviewable milestones.

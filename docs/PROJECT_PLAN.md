@@ -46,20 +46,22 @@ Settings may be accessed separately through a gear icon.
 
 ### Logical Reasoning
 Support targeted or mixed practice across categories such as:
+- Identify the conclusion
+- Identify premises / evidence
+- Main point
+- Role of a statement
+- Method of reasoning
 - Strengthen
 - Weaken
 - Necessary assumption
 - Sufficient assumption
 - Flaw
 - Inference / must be true
-- Main conclusion
-- Role of a statement
-- Method of reasoning
+- Resolve or explain
+- Principle: application or justification
+- Evaluate an argument
 - Parallel reasoning
 - Parallel flaw
-- Resolve/explain a discrepancy
-- Principle
-- Evaluate an argument
 
 Question taxonomy should be data-driven so categories can be edited without rewriting the practice engine.
 
@@ -135,14 +137,14 @@ The initial importer accepts versioned, offline JSON content packages created fo
 7. Show the final result and record an import-history entry.
 
 Safeguards:
-- Only questions marked `approved` and passing the content QA requirements may be imported into the usable question bank. Draft or merely reviewed items are not practice-eligible.
+- Only questions marked `approved` and passing the content QA requirements may be imported into the usable question bank. If any question is not approved, the whole package is rejected. Draft or merely reviewed items are not practice-eligible.
 - Validate schema version, package identity/version, stable IDs, section/category references, exactly five choices, one valid correct choice, explanations for all choices, and valid RC passage references.
 - Detect duplicate IDs and duplicate package versions before writing. Do not replace existing questions or passages during normal import. A future explicit content-update workflow would need its own review and approval.
 - Do not alter, delete, or reset user attempts, bookmarks, session history, statistics, or settings during content import.
 - Keep an import history with timestamp, package identity/version, counts added/skipped, and outcome/error summary.
 - Import and validation must work entirely offline. Treat package files as untrusted input; enforce reasonable file-size and field-length limits and never execute embedded content.
 
-The JSON package contract and validation rules belong in `DATABASE_SCHEMA.md` and the implementation roadmap. The interface should be understandable to a nontechnical user and should explain validation failures in plain language.
+The JSON package contract and validation rules are in `CONTENT_PACKAGE_FORMAT.md`. The interface should be understandable to a nontechnical user and should explain validation failures in plain language.
 
 
 ## 5. Question bank goals

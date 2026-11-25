@@ -26,12 +26,12 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 
 ## Milestone 2 — Content and persistence
 - [x] Add basic Tauri 2 desktop shell and verify it on Linux (moved from Milestone 9).
-- [ ] Define domain types.
+- [x] Define domain types.
 - [ ] Finalize database schema.
 - [ ] Add SQLite access layer.
-- [ ] Create content package format.
-- [ ] Define/version the JSON content-package contract.
-- [ ] Implement package parser and side-effect-free validation.
+- [x] Create content package format.
+- [x] Define/version the JSON content-package contract.
+- [x] Implement package parser and side-effect-free validation.
 - [ ] Add Settings → Question Bank Management.
 - [ ] Add Import Questions local file picker.
 - [ ] Build validation feedback and package preview.

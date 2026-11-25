@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "tauri": "tauri",
-    "app": "env -u GTK_PATH -u GIO_MODULE_DIR tauri dev"
+    "app": "env -u GTK_PATH -u GIO_MODULE_DIR tauri dev",
+    "test": "vitest run"
   },
   "dependencies": {
     "react": "^19.3.1",
@@ -25,6 +26,7 @@
     "oxlint": "^1.90.0",
     "tailwindcss": "^4.3.5",
     "typescript": "~7.0.2",
-    "vite": "^8.3.6"
+    "vite": "^8.3.6",
+    "vitest": "^5.1.1"
   }
 }

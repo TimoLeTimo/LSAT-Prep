@@ -9,6 +9,7 @@ This is a conceptual schema for planning. Final SQL should be written only after
 - `section` — `logical_reasoning` or `reading_comprehension`.
 - `category_id` — category reference.
 - `difficulty` — controlled value.
+- `stimulus` — argument or statements for LR; null for RC.
 - `prompt` — question stem.
 - `correct_choice_id` — correct answer identifier.
 - `estimated_seconds` — optional estimate.
@@ -133,6 +134,8 @@ Document calculations:
 - Test restore on a clean database.
 
 ## 5. Content package
+The exact JSON format is in `CONTENT_PACKAGE_FORMAT.md`.
+
 A content package should include:
 - Package ID and version.
 - Schema version.
@@ -148,7 +151,7 @@ The package manifest should contain at least:
 - Provenance and QA/review metadata for each question.
 
 Import eligibility and validation rules:
-- Only `approved` questions are eligible for the active question bank. Draft/review-only items must be rejected or explicitly excluded with a clear preview; they must never become practice-eligible.
+- Only `approved` questions are eligible for the active question bank. If any question is not approved, the whole package is rejected with an error naming it.
 - Every imported question must have a stable unique ID, valid section/category, supported difficulty, prompt, exactly five uniquely identified choices, exactly one correct choice that references one of those choices, and a non-empty explanation for every choice.
 - Every RC question must reference an existing passage in the same package or a valid already-imported passage. Comparative sets must preserve all required passage relationships.
 - Reject duplicate IDs within the package. Compare package ID/version and item IDs against the local database before confirmation.
