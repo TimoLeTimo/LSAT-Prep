@@ -11,6 +11,7 @@ export interface TimeLimit {
   problem: string | null
   /** Null when untimed. */
   seconds: number | null
+  setSeconds: (seconds: number | null) => void
 }
 
 export function useTimeLimit(): TimeLimit {
@@ -26,5 +27,9 @@ export function useTimeLimit(): TimeLimit {
     problem:
       isTimed && !isValid ? `Enter a number of minutes from 1 to ${MAX_MINUTES}.` : null,
     seconds: isTimed ? number * 60 : null,
+    setSeconds: (seconds) => {
+      setIsTimed(seconds !== null)
+      if (seconds !== null) setMinutes(String(seconds / 60))
+    },
   }
 }

@@ -77,7 +77,7 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [ ] Explanation timing. (Built; real-window check remains.)
 - [ ] Question subset filters. (Built; real-window check remains.)
 - [ ] Randomization. (Built; real-window check remains.)
-- [ ] Saved templates.
+- [ ] Saved templates. (Built; real-window check remains.)
 - [ ] Availability validation. (Built; real-window check remains.)
 
 ## Milestone 6 — Practice tests

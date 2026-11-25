@@ -3,6 +3,7 @@ mod commands;
 mod db;
 mod import;
 mod practice;
+mod templates;
 
 use std::sync::Mutex;
 
@@ -41,6 +42,11 @@ fn configure<R: Runtime>(builder: Builder<R>) -> Builder<R> {
       commands::save_clock,
       commands::pause_clock,
       commands::set_bookmark,
+      commands::list_templates,
+      commands::create_template,
+      commands::update_template,
+      commands::rename_template,
+      commands::delete_template,
     ])
 }
 

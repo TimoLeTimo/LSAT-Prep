@@ -15,6 +15,7 @@ use crate::{
   db::DbError,
   import::{self, Catalog, Entry, Plan, Session, package::{Label, Section}},
   practice::{self, Clock, Config, Reading},
+  templates::{self, Choices, Template},
 };
 
 /// The open database, or the reason it could not be opened.
@@ -251,6 +252,41 @@ pub fn pause_clock(
   database: State<Database>,
 ) -> Result<Reading, String> {
   lock(&clock.0)?.pause(&mut *database.get()?, &session_id, Instant::now()).map_err(text)
+}
+
+// ---------------------------------------------------------------- Templates
+
+#[tauri::command(async)]
+pub fn list_templates(database: State<Database>) -> Result<Vec<Template>, String> {
+  templates::list(&*database.get()?).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn create_template(
+  name: String,
+  choices: Choices,
+  database: State<Database>,
+) -> Result<(), String> {
+  templates::create(&mut *database.get()?, &name, &choices).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn update_template(
+  id: String,
+  choices: Choices,
+  database: State<Database>,
+) -> Result<(), String> {
+  templates::update(&mut *database.get()?, &id, &choices).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn rename_template(id: String, name: String, database: State<Database>) -> Result<(), String> {
+  templates::rename(&mut *database.get()?, &id, &name).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn delete_template(id: String, database: State<Database>) -> Result<(), String> {
+  templates::delete(&mut *database.get()?, &id).map_err(text)
 }
 
 /// Refuses an answer when time is up or the timer is paused.
@@ -499,6 +535,31 @@ mod tests {
     assert_eq!(index["questions"][0]["last_correct"], true);
     // No longer new.
     assert!(call("create_session", body).is_err());
+  }
+
+  #[test]
+  fn the_interface_can_manage_templates() {
+    let dir = TempDir::new();
+    let app = app(Ok(db::open(&dir.0).unwrap()));
+    let window = window(&app);
+    let call = |command: &str, body: Value| call(&window, command, body);
+    let choices = json!({
+      "categories": [{ "id": "lr-flaw", "section": "logical_reasoning", "name": "Flaw" }],
+      "difficulties": [], "lr_count": 5, "passage_count": 0, "subset": "any",
+      "exclude_correct": false, "shuffle_questions": false, "shuffle_answers": false,
+      "explanations": "after_each", "time_limit_seconds": null
+    });
+    let first = json!({ "name": "One", "choices": choices });
+    assert_eq!(call("create_template", first.clone()), Ok(Value::Null));
+    assert!(call("create_template", first).is_err());
+    let list = call("list_templates", json!({})).unwrap();
+    assert_eq!(list[0]["choices"], choices);
+    let id = &list[0]["id"];
+    call("update_template", json!({ "id": id, "choices": choices })).unwrap();
+    call("rename_template", json!({ "id": id, "name": "Two" })).unwrap();
+    assert_eq!(call("list_templates", json!({})).unwrap()[0]["name"], "Two");
+    call("delete_template", json!({ "id": id })).unwrap();
+    assert_eq!(call("list_templates", json!({})), Ok(json!([])));
   }
 
   #[test]

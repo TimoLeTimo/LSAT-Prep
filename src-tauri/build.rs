@@ -25,6 +25,11 @@ fn main() {
     "save_clock",
     "pause_clock",
     "set_bookmark",
+    "list_templates",
+    "create_template",
+    "update_template",
+    "rename_template",
+    "delete_template",
   ]);
   tauri_build::try_build(tauri_build::Attributes::new().app_manifest(commands))
     .expect("failed to prepare the Tauri build");

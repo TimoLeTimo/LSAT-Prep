@@ -1,7 +1,7 @@
 import type { CustomFilter, CustomPool } from './chooseCustom'
 
-const MAX_LR = 500
-const MAX_PASSAGES = 50
+export const MAX_LR = 500
+export const MAX_PASSAGES = 50
 const MAX_QUESTIONS = 500
 
 const subsetWords: Record<CustomFilter['subset'], string> = {

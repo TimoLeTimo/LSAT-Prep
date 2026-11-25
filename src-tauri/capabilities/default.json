@@ -29,6 +29,11 @@
     "allow-start-clock",
     "allow-save-clock",
     "allow-pause-clock",
-    "allow-set-bookmark"
+    "allow-set-bookmark",
+    "allow-list-templates",
+    "allow-create-template",
+    "allow-update-template",
+    "allow-rename-template",
+    "allow-delete-template"
   ]
 }

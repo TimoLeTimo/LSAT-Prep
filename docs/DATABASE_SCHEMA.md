@@ -23,6 +23,7 @@ The exact tables are in `src-tauri/migrations/`; those files are authoritative. 
   - Shuffled answers are relabeled A–E on screen, and the order is saved in the snapshot. Attempts store the original choices. A question whose text mentions choices by letter or position is not shuffled.
   - A Reading Comprehension session is made of whole passages. Each has all of its available questions, in imported order, and at least one must match the chosen filters. Both TypeScript and Rust enforce this.
   - A flag lasts for its session. A bookmark belongs to the question and can also change while reviewing a finished session.
+- Templates (`src-tauri/src/templates.rs`) hold choices only, never questions. Names are unique ignoring capitals, up to 60 characters, with at most 50 templates. Each chosen category keeps its section and name, so one that is later unavailable can be explained. A template whose choices cannot be read stays listed and can be renamed or deleted.
 - Content with history or bookmarks cannot be deleted. Retire it instead.
 - The session clock runs in Rust (`practice/clock.rs`) while the practice screen is open, and `active_ms` stores the time it has run.
   - It pauses when the user leaves the screen or closes the app, but not when the window is hidden. It relies on a system clock that should stop during sleep.
