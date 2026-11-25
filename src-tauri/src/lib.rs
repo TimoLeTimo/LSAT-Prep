@@ -5,8 +5,6 @@ mod import;
 mod practice;
 mod templates;
 
-use std::sync::Mutex;
-
 use tauri::{Builder, Manager, RunEvent, Runtime};
 
 use commands::{CurrentImport, Database, ExamTimer, SessionClock};
@@ -56,17 +54,22 @@ fn configure<R: Runtime>(builder: Builder<R>) -> Builder<R> {
       commands::start_exam_section,
       commands::end_exam_section,
       commands::latest_exam,
+      commands::data_summary,
+      commands::can_restore,
+      commands::back_up_data,
+      commands::choose_backup,
+      commands::cancel_restore,
+      commands::confirm_restore,
     ])
 }
 
 pub fn run() {
   configure(tauri::Builder::default())
     .setup(|app| {
-      let database = match app.path().app_data_dir() {
-        Ok(dir) => db::open(&dir).map(Mutex::new).map_err(|error| error.to_string()),
-        Err(error) => Err(format!("The data folder could not be found ({error}).")),
-      };
-      app.manage(Database(database));
+      app.manage(match app.path().app_data_dir() {
+        Ok(dir) => Database::open(&dir),
+        Err(error) => Database::failed(format!("The data folder could not be found ({error}).")),
+      });
       Ok(())
     })
     .build(tauri::generate_context!())

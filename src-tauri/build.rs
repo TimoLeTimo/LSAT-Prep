@@ -38,6 +38,12 @@ fn main() {
     "start_exam_section",
     "end_exam_section",
     "latest_exam",
+    "data_summary",
+    "can_restore",
+    "back_up_data",
+    "choose_backup",
+    "cancel_restore",
+    "confirm_restore",
   ]);
   tauri_build::try_build(tauri_build::Attributes::new().app_manifest(commands))
     .expect("failed to prepare the Tauri build");

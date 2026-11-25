@@ -1,6 +1,6 @@
 # LSAT Prep
 
-An offline-first LSAT-style practice app for macOS. Question import, and Logical Reasoning, Reading Comprehension, custom practice (timed or untimed), and custom section tests and full simulations are in place.
+An offline-first LSAT-style practice app for macOS. Question import, and Logical Reasoning, Reading Comprehension, custom practice (timed or untimed), and custom section tests and full simulations, and backup and restore, are in place. Review and Statistics are postponed.
 Product requirements are in [docs/](docs/README.md).
 
 ## Requirements
@@ -37,7 +37,7 @@ http://localhost:5173. Port 5173 must be free; do not run both commands at once.
 ```bash
 npm run build     # type-check and create a production build in dist/
 npm test          # run the TypeScript tests
-npm run test:rust # run the database, import, and session tests
+npm run test:rust # run the Rust tests
 npm run lint      # check the code for common mistakes
 npm run tauri -- build --debug --no-bundle   # desktop test build, no installer
 npm run preview   # serve the production build locally (run build first)

@@ -2,7 +2,7 @@
 
 use std::{fs, path::Path};
 
-use rusqlite::{Connection, TransactionBehavior, backup::Backup};
+use rusqlite::{Connection, TransactionBehavior};
 
 use super::{APPLICATION_ID, DbError};
 
@@ -34,7 +34,8 @@ pub fn run(conn: &mut Connection, dir: &Path, migrations: &[&str]) -> Result<(),
     return Ok(());
   }
   if current > 0 {
-    back_up(conn, dir, current).map_err(|error| DbError::Backup(Box::new(error)))?;
+    back_up(conn, dir, &format!("before-upgrade-v{current}"))
+      .map_err(|error| DbError::Backup(Box::new(error)))?;
   }
 
   // Immediate: takes the write lock first, then rechecks in case another copy of the
@@ -50,24 +51,22 @@ pub fn run(conn: &mut Connection, dir: &Path, migrations: &[&str]) -> Result<(),
   Ok(())
 }
 
-/// Saves a complete copy before an upgrade. Backups are never deleted automatically.
-fn back_up(conn: &Connection, dir: &Path, version: i64) -> Result<(), DbError> {
-  let folder = dir.join("backups");
-  fs::create_dir_all(&folder)?;
+/// A UTC time for file names, such as 20261124T120000000Z.
+pub fn timestamp(conn: &Connection) -> Result<String, DbError> {
   let time: String =
     conn.query_row("SELECT strftime('%Y%m%dT%H%M%fZ', 'now')", [], |row| row.get(0))?;
-  let name = format!("before-upgrade-v{version}-{}", time.replace('.', ""));
-  let partial = folder.join(format!("{name}.partial"));
+  Ok(time.replace('.', ""))
+}
 
-  let mut copy = Connection::open(&partial)?;
-  Backup::new(conn, &mut copy)?.run_to_completion(1000, std::time::Duration::ZERO, None)?;
-  // A single self-contained file, checked before it is trusted.
-  copy.pragma_update(None, "journal_mode", "DELETE")?;
-  let check: String = copy.query_row("PRAGMA integrity_check(1)", [], |row| row.get(0))?;
-  if check != "ok" {
-    return Err(DbError::Damaged);
-  }
-  copy.close().map_err(|(_, error)| error)?;
-  fs::rename(&partial, folder.join(format!("{name}.db")))?;
-  Ok(())
+/// Saves a complete copy of the current data, and returns its file name. These backups are
+/// never deleted automatically.
+pub fn back_up(conn: &Connection, dir: &Path, reason: &str) -> Result<String, DbError> {
+  let folder = dir.join("backups");
+  fs::create_dir_all(&folder)?;
+  let name = format!("{reason}-{}", timestamp(conn)?);
+  let partial = folder.join(format!("{name}.partial"));
+  super::backup::write_copy(conn, &partial)?;
+  let name = format!("{name}.db");
+  fs::rename(&partial, folder.join(&name))?;
+  Ok(name)
 }

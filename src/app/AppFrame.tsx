@@ -37,7 +37,11 @@ export function AppFrame({ route, title, children }: AppFrameProps) {
             aria-label="Settings"
             title="Settings"
             aria-current={
-              route === 'settings' ? 'page' : route === 'question-bank' ? 'true' : undefined
+              route === 'settings'
+                ? 'page'
+                : route === 'question-bank' || route === 'backup'
+                  ? 'true'
+                  : undefined
             }
             className="rounded-lg p-2.5 text-muted transition-colors hover:bg-blush hover:text-rose-deep aria-[current]:bg-blush aria-[current]:text-rose-deep"
           >

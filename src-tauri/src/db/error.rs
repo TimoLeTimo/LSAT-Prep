@@ -8,6 +8,9 @@ pub enum DbError {
   NotOurs,
   TooNew { found: i64, supported: i64 },
   Backup(Box<DbError>),
+  InUse,
+  /// A plain-language reason.
+  Refused(&'static str),
 }
 
 /// Messages are shown to the user.
@@ -19,12 +22,14 @@ impl fmt::Display for DbError {
       DbError::File(error) => write!(f, "The data folder could not be used ({error})."),
       DbError::Damaged => write!(f, "The data file is damaged."),
       DbError::NotOurs => write!(f, "The data file was not created by LSAT Prep."),
+      DbError::InUse => write!(f, "LSAT Prep is already open. Use the other window."),
+      DbError::Refused(reason) => f.write_str(reason),
       DbError::TooNew { found, supported } => write!(
         f,
         "The data was saved by a newer version of LSAT Prep (data version {found}; this app supports {supported})."
       ),
       DbError::Backup(error) => {
-        write!(f, "A backup could not be made, so the update was not started. {error}")
+        write!(f, "A backup could not be made, so nothing was changed. {error}")
       }
     }
   }

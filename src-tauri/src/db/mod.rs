@@ -1,7 +1,10 @@
 //! Opens the local SQLite database and keeps its structure up to date.
 
+pub mod backup;
 mod error;
 mod migrations;
+#[cfg(test)]
+mod backup_tests;
 #[cfg(test)]
 pub mod test_support;
 #[cfg(test)]
@@ -16,6 +19,18 @@ pub use error::DbError;
 const FILE_NAME: &str = "lsat-prep.db";
 /// Marks a SQLite file as belonging to this app ("LSAT" in ASCII).
 const APPLICATION_ID: i64 = 0x4C53_4154;
+
+/// Held while the app is open, so two copies cannot use the same data. The system releases
+/// it however the app ends.
+pub fn lock(dir: &Path) -> Result<fs::File, DbError> {
+  fs::create_dir_all(dir)?;
+  let file = fs::OpenOptions::new().write(true).create(true).truncate(false).open(dir.join("lsat-prep.lock"))?;
+  match file.try_lock() {
+    Ok(()) => Ok(file),
+    Err(fs::TryLockError::WouldBlock) => Err(DbError::InUse),
+    Err(fs::TryLockError::Error(error)) => Err(error.into()),
+  }
+}
 
 /// Opens the database in `dir`, creating or upgrading it if needed.
 pub fn open(dir: &Path) -> Result<Connection, DbError> {

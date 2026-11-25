@@ -4,6 +4,7 @@ import { destinations, type Route } from './app/routes'
 import { useRoute } from './app/useRoute'
 import { PlaceholderScreen } from './components/PlaceholderScreen'
 import type { Section } from './domain/content/types'
+import { BackupScreen } from './features/backup/BackupScreen'
 import { PracticeTestsScreen } from './features/exam/PracticeTestsScreen'
 import { PracticeScreen } from './features/practice/PracticeScreen'
 import { QuestionBankScreen } from './features/question-bank/QuestionBankScreen'
@@ -12,6 +13,7 @@ import { SettingsScreen } from './features/settings/SettingsScreen'
 const otherTitles: Partial<Record<Route, string>> = {
   settings: 'Settings',
   'question-bank': 'Question Bank Management',
+  backup: 'Backup and Restore',
 }
 
 const practiceSections: Partial<Record<Route, Section | null>> = {
@@ -31,6 +33,7 @@ function App() {
       {route === 'menu' && <MainMenu />}
       {route === 'settings' && <SettingsScreen />}
       {route === 'question-bank' && <QuestionBankScreen />}
+      {route === 'backup' && <BackupScreen />}
       {practiceSection !== undefined && <PracticeScreen key={route} section={practiceSection} />}
       {route === 'practice-tests' && <PracticeTestsScreen />}
       {destination && practiceSection === undefined && route !== 'practice-tests' && <PlaceholderScreen key={route} title={title} />}

@@ -148,7 +148,7 @@ fn no_upgrade_without_a_backup() {
   drop(database_with_attempt(&dir));
   fs::write(dir.0.join("backups"), "blocks the folder").unwrap();
   let next = [migrations::ALL, &["CREATE TABLE added (x TEXT);"]].concat();
-  assert!(message(open_with(&dir.0, &next)).contains("update was not started"));
+  assert!(message(open_with(&dir.0, &next)).contains("nothing was changed"));
   fs::remove_file(dir.0.join("backups")).unwrap();
   assert_eq!(migrations::version(&open(&dir.0).unwrap()).unwrap(), LATEST);
 }

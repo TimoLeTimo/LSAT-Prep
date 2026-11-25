@@ -106,8 +106,8 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [x] Offline test.
 - [x] Restart/recovery test.
 - [ ] Timer suspension test. (Needs a real suspend.)
-- [ ] Backup/export.
-- [ ] Restore test.
+- [x] Backup/export.
+- [x] Restore test.
 - [x] Migration test.
 - [x] Keyboard/accessibility check. (A screen reader is untested.)
 

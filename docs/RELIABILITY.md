@@ -1,8 +1,8 @@
 # Reliability Checks
 
 **Checked:** November 24, 2026, on Ubuntu 24.04, with the real app window, engine, and database.
-The app was built from a temporary copy with two changes: a way to run page scripts, and a fixed
-path in place of the native file picker. Keyboard checks used real key presses. These checks need
+The app was built from a temporary copy with two changes: a way to run page scripts, and fixed
+paths in place of the native file pickers. Keyboard checks used real key presses. These checks need
 repeating on macOS.
 
 | Area | What was done | Result |
@@ -17,6 +17,11 @@ repeating on macOS.
 | Custom filters | Category, difficulty, both with a passage, missed, new, shuffled order, timed; chosen questions compared with the database | All matched. "Exclude correct" and a bookmarked session were checked only by unit tests |
 | Migration | Opened copies of version 1, 2, and 3 databases | Upgraded, data kept, backup made |
 | Restoring a backup | Opened automatic backups in clean folders | Data present |
+| Backup and restore | Saved, compared, restored, undid, reopened | Data matched each time |
+| Bad backups | Hidden code, junk, damaged, wrong type, missing | Refused; data unchanged |
+| Killed during a restore | 12 times, at random moments | Always entirely the old or the new data; checks passed |
+| Unreadable data | Restored a backup over it | Recovered; the old file kept |
+| Two copies of the app | Opened a second on the same data | Refused; the first kept working; lock freed after a kill |
 | Damage | Damaged the header, then a middle page | Refused, file unchanged |
 | Read-only data | Removed write permission | Clear error |
 | Accessibility | Names, labels, IDs, headings, contrast, and target size on 25 screens, with a control | No problems found |
@@ -25,5 +30,5 @@ repeating on macOS.
 Simulated time: the section start and break end times were moved back in the test database, rather
 than waiting 35 and 10 minutes.
 
-**Not checked:** real suspend, power loss, a full disk, two copies of the app at once, a screen
-reader, the native file picker (confirmed by hand), and macOS.
+**Not checked:** real suspend, power loss, a full disk, a screen reader, the native
+file pickers (opening a file was confirmed by hand; saving was not), and macOS.

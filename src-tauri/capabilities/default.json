@@ -42,6 +42,12 @@
     "allow-leave-exam",
     "allow-start-exam-section",
     "allow-end-exam-section",
-    "allow-latest-exam"
+    "allow-latest-exam",
+    "allow-data-summary",
+    "allow-can-restore",
+    "allow-back-up-data",
+    "allow-choose-backup",
+    "allow-cancel-restore",
+    "allow-confirm-restore"
   ]
 }

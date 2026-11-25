@@ -6,6 +6,9 @@ The exact tables are in `src-tauri/migrations/`; those files are authoritative. 
 - The Rust layer in `src-tauri/src/db/` owns the database through `rusqlite` with bundled SQLite. The interface calls specific commands and never sends SQL. Application rules stay in TypeScript.
 - Migrations are numbered files that are never edited after release. Missing migrations run in one transaction, so either all succeed or none do.
 - An existing database is backed up and the copy checked before an upgrade. If the backup fails, the upgrade does not start. Backups are in the `backups` folder beside the database and are not deleted automatically.
+- User backups (`src-tauri/src/db/backup.rs`) are one complete, checked file. Restoring copies the chosen file into the app's folder and requires its structure to match exactly what this app creates at that version, before anything in it is used. It is then upgraded and checked. Current data is backed up first, and the replacement happens in one SQLite transaction.
+- If the current data cannot be opened, a restore moves it to `backups/unreadable-…`, unchanged.
+- A lock on `lsat-prep.lock` lets only one copy of the app use a data folder.
 - The app refuses a database that is damaged, from a newer version, or from another program, and shows an error instead of resetting it.
 - The app data folder is chosen by the operating system for `com.lsatprep.desktop`. While the app is open, or after a crash, recent changes may be in `lsat-prep.db-wal`, so do not copy `lsat-prep.db` alone. A normal close moves them into `lsat-prep.db`.
 - Passage texts are in `passage_texts`, tags in `question_tags`, and provenance and review data in JSON columns. Content rows name the package they came from.

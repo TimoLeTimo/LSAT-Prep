@@ -2,6 +2,9 @@
 //! capabilities/default.json. `async` keeps slow work from freezing the window.
 
 use std::{
+  fs::File,
+  ops::{Deref, DerefMut},
+  path::{Path, PathBuf},
   sync::{Mutex, MutexGuard},
   time::Instant,
 };
@@ -12,7 +15,7 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::{
   bank::{self, QuestionIndex},
-  db::{self, DbError},
+  db::{self, DbError, backup::{self, Summary}},
   import::{self, Catalog, Entry, Plan, Session, package::{Label, Section}},
   practice::{
     self, Clock, Config, ExamKind, Reading,
@@ -21,12 +24,89 @@ use crate::{
   templates::{self, Choices, Template},
 };
 
-/// The open database, or the reason it could not be opened.
-pub struct Database(pub Result<Mutex<Connection>, String>);
+enum Store {
+  Open(Connection),
+  /// Why it could not be opened, and whether a backup could take its place.
+  Failed { message: String, can_restore: bool },
+}
+
+/// The database, and the lock that keeps other copies of the app away from it.
+pub struct Database {
+  state: Mutex<Store>,
+  dir: Option<PathBuf>,
+  _lock: Option<File>,
+}
+
+/// The open database, locked for one command.
+pub struct OpenDatabase<'a>(MutexGuard<'a, Store>);
+
+impl Deref for OpenDatabase<'_> {
+  type Target = Connection;
+  fn deref(&self) -> &Connection {
+    match &*self.0 {
+      Store::Open(conn) => conn,
+      Store::Failed { .. } => unreachable!("only built for an open database"),
+    }
+  }
+}
+
+impl DerefMut for OpenDatabase<'_> {
+  fn deref_mut(&mut self) -> &mut Connection {
+    match &mut *self.0 {
+      Store::Open(conn) => conn,
+      Store::Failed { .. } => unreachable!("only built for an open database"),
+    }
+  }
+}
 
 impl Database {
-  fn get(&self) -> Result<MutexGuard<'_, Connection>, String> {
-    lock(self.0.as_ref().map_err(Clone::clone)?)
+  pub fn open(dir: &Path) -> Self {
+    let dir = Some(dir.to_owned());
+    let folder = dir.as_deref().expect("just set");
+    let lock = match db::lock(folder) {
+      Ok(lock) => lock,
+      // The data may be fine and in use, so nothing here may touch it.
+      Err(error) => return Self::failed(error.to_string()),
+    };
+    backup::clear_staging(folder);
+    let state = match db::open(folder) {
+      Ok(conn) => Store::Open(conn),
+      Err(error) => Store::Failed { message: error.to_string(), can_restore: true },
+    };
+    Database { state: Mutex::new(state), dir, _lock: Some(lock) }
+  }
+
+  pub fn failed(message: String) -> Self {
+    let state = Mutex::new(Store::Failed { message, can_restore: false });
+    Database { state, dir: None, _lock: None }
+  }
+
+  fn get(&self) -> Result<OpenDatabase<'_>, String> {
+    let state = lock(&self.state)?;
+    match &*state {
+      Store::Open(_) => Ok(OpenDatabase(state)),
+      Store::Failed { message, .. } => Err(message.clone()),
+    }
+  }
+
+  fn dir(&self) -> Result<&Path, String> {
+    self.dir.as_deref().ok_or_else(|| "The data folder is not available.".into())
+  }
+
+  /// Replaces the data with the chosen backup. Returns what the old data was saved as.
+  fn restore(&self) -> Result<String, String> {
+    let dir = self.dir()?;
+    let mut state = lock(&self.state)?;
+    match &mut *state {
+      Store::Open(conn) => backup::restore(conn, dir).map_err(|error| backup::explain(&error)),
+      Store::Failed { can_restore: true, .. } => {
+        let (conn, name) =
+          backup::restore_over_unreadable(dir).map_err(|error| backup::explain(&error))?;
+        *state = Store::Open(conn);
+        Ok(name)
+      }
+      Store::Failed { message, .. } => Err(message.clone()),
+    }
   }
 }
 
@@ -339,6 +419,128 @@ pub fn end_exam_section(
   exam.end_section(&mut *database.get()?, &session_id, position, Now::get()).map_err(text)
 }
 
+// ---------------------------------------------------------------- Backup and restore
+
+#[tauri::command(async)]
+pub fn data_summary(database: State<Database>) -> Result<Summary, String> {
+  backup::summary(&*database.get()?).map_err(text)
+}
+
+/// Whether a backup can be restored, including when the current data cannot be opened.
+#[tauri::command]
+pub fn can_restore(database: State<Database>) -> Result<bool, String> {
+  Ok(match &*lock(&database.state)? {
+    Store::Open(_) => true,
+    Store::Failed { can_restore, .. } => *can_restore,
+  })
+}
+
+/// Asks where to save, then saves a backup there. Returns its name, or null if cancelled.
+#[tauri::command(async)]
+pub fn back_up_data<R: Runtime>(
+  window: WebviewWindow<R>,
+  database: State<Database>,
+) -> Result<Option<String>, String> {
+  let today: String = database
+    .get()?
+    .query_row("SELECT date('now', 'localtime')", [], |row| row.get(0))
+    .map_err(db_text)?;
+  let picked = window
+    .dialog()
+    .file()
+    .set_parent(&window)
+    .set_title("Save a backup")
+    .set_file_name(format!("lsat-prep-backup-{today}.db"))
+    .add_filter("LSAT Prep backup", &["db"])
+    .blocking_save_file();
+  let Some(picked) = picked else {
+    return Ok(None);
+  };
+  let path = picked.into_path().map_err(|_| "The backup could not be saved there.")?;
+  save_backup(&database, &path).map(Some)
+}
+
+fn save_backup(database: &Database, path: &Path) -> Result<String, String> {
+  let dir = database.dir()?;
+  backup::export(&*database.get()?, dir, path).map_err(|error| backup::explain_save(&error))?;
+  Ok(path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default())
+}
+
+#[derive(serde::Serialize)]
+pub struct ChosenBackup {
+  name: String,
+  /// Milliseconds since 1970, or null if unknown.
+  modified_ms: Option<i64>,
+  summary: Summary,
+}
+
+/// Asks for a backup and checks it. Changes nothing. Returns null if cancelled.
+#[tauri::command(async)]
+pub fn choose_backup<R: Runtime>(
+  window: WebviewWindow<R>,
+  database: State<Database>,
+) -> Result<Option<ChosenBackup>, String> {
+  let mut dialog = window
+    .dialog()
+    .file()
+    .set_parent(&window)
+    .set_title("Choose a backup")
+    .add_filter("LSAT Prep backup", &["db"]);
+  // Automatic backups are here.
+  let automatic = database.dir()?.join("backups");
+  if automatic.is_dir() {
+    dialog = dialog.set_directory(automatic);
+  }
+  let Some(picked) = dialog.blocking_pick_file() else {
+    return Ok(None);
+  };
+  let path = picked.into_path().map_err(|_| "The file could not be read.")?;
+  check_backup(&database, &path).map(Some)
+}
+
+fn check_backup(database: &Database, path: &Path) -> Result<ChosenBackup, String> {
+  // Held so that nothing is restored while the copy is being checked.
+  let _state = lock(&database.state)?;
+  let summary =
+    backup::stage(database.dir()?, path).map_err(|error| backup::explain(&error))?;
+  let modified_ms = std::fs::metadata(path)
+    .and_then(|info| info.modified())
+    .ok()
+    .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+    .map(|time| time.as_millis() as i64);
+  let name = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+  Ok(ChosenBackup { name, modified_ms, summary })
+}
+
+#[tauri::command(async)]
+pub fn cancel_restore(database: State<Database>) -> Result<(), String> {
+  let _state = lock(&database.state)?;
+  backup::clear_staging(database.dir()?);
+  Ok(())
+}
+
+/// Replaces the current data. Returns what the replaced data was saved as.
+#[tauri::command(async)]
+pub fn confirm_restore(
+  clock: State<SessionClock>,
+  exam: State<ExamTimer>,
+  import: State<CurrentImport>,
+  database: State<Database>,
+) -> Result<String, String> {
+  // Nothing in progress may carry over to the restored data.
+  let mut clock = lock(&clock.0)?;
+  let mut exam = lock(&exam.0)?;
+  let mut import = lock(&import.0)?;
+  if let Ok(mut conn) = database.get() {
+    let _ = clock.pause_any(&mut conn, Instant::now());
+    let _ = exam.leave_any(&mut conn, Now::get());
+  }
+  *clock = Clock::default();
+  *exam = ExamClock::default();
+  import.cancel();
+  database.restore()
+}
+
 // ---------------------------------------------------------------- Templates
 
 #[tauri::command(async)]
@@ -415,6 +617,7 @@ pub fn abandon_session(session_id: String, database: State<Database>) -> Result<
 mod tests {
   use serde_json::{Value, json};
   use tauri::{
+    Manager,
     ipc::{CallbackFn, InvokeBody},
     test::{INVOKE_KEY, MockRuntime, get_ipc_response, mock_builder},
     webview::InvokeRequest,
@@ -428,7 +631,10 @@ mod tests {
   /// The real app setup and permissions, with a simulated window.
   fn app(database: Result<Connection, String>) -> tauri::App<MockRuntime> {
     crate::configure(mock_builder())
-      .manage(Database(database.map(Mutex::new)))
+      .manage(match database {
+        Ok(conn) => Database { state: Mutex::new(Store::Open(conn)), dir: None, _lock: None },
+        Err(message) => Database::failed(message),
+      })
       .build(tauri::generate_context!(test = true))
       .unwrap()
   }
@@ -720,6 +926,80 @@ mod tests {
     assert_eq!((&questions[0]["is_scored"], &questions[1]["is_scored"]), (&json!(true), &json!(false)));
     assert_eq!(call("unfinished_exam", json!({})), Ok(Value::Null));
     assert_eq!(call("latest_exam", json!({})), Ok(done));
+  }
+
+  /// An app whose data is in this folder, opened as it really is.
+  fn app_in(dir: &TempDir) -> tauri::App<MockRuntime> {
+    crate::configure(mock_builder())
+      .manage(Database::open(&dir.0))
+      .build(tauri::generate_context!(test = true))
+      .unwrap()
+  }
+
+  #[test]
+  fn the_interface_can_back_up_and_restore() {
+    let (dir, elsewhere) = (TempDir::new(), TempDir::new());
+    let app = app_in(&dir);
+    let window = window(&app);
+    let call = |command: &str, body: Value| call(&window, command, body);
+    let database = app.state::<Database>();
+    let file = elsewhere.0.join("mine.db");
+    assert_eq!(save_backup(&database, &file), Ok("mine.db".into()));
+    let missing = save_backup(&database, &elsewhere.0.join("missing").join("x.db"));
+    assert!(missing.unwrap_err().contains("could not be saved there"));
+    let choices = json!({
+      "categories": [], "difficulties": [], "lr_count": 5, "passage_count": 0, "subset": "any",
+      "exclude_correct": false, "shuffle_questions": false, "shuffle_answers": false,
+      "explanations": "after_each", "time_limit_seconds": null
+    });
+    call("create_template", json!({ "name": "One", "choices": choices })).unwrap();
+    assert_eq!(call("data_summary", json!({})).unwrap()["templates"], 1);
+    assert_eq!(call("can_restore", json!({})), Ok(json!(true)));
+    assert!(call("confirm_restore", json!({})).is_err(), "nothing was chosen");
+
+    let chosen = check_backup(&database, &file).unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!((chosen.name.as_str(), chosen.summary.templates), ("mine.db", 0));
+    assert!(chosen.modified_ms.is_some());
+    call("cancel_restore", json!({})).unwrap();
+    assert!(call("confirm_restore", json!({})).is_err(), "it was cancelled");
+    check_backup(&database, &file).unwrap_or_else(|error| panic!("{error}"));
+    let saved = call("confirm_restore", json!({})).unwrap();
+    assert!(saved.as_str().unwrap().starts_with("before-restore-"));
+    assert_eq!(call("data_summary", json!({})).unwrap()["templates"], 0);
+    assert!(call("confirm_restore", json!({})).is_err(), "only once");
+  }
+
+  #[test]
+  fn the_interface_can_restore_over_unreadable_data() {
+    let (dir, elsewhere) = (TempDir::new(), TempDir::new());
+    let file = elsewhere.0.join("mine.db");
+    let conn = db::open(&dir.0).unwrap();
+    backup::export(&conn, &dir.0, &file).unwrap();
+    drop(conn);
+    std::fs::write(dir.0.join("lsat-prep.db"), "ruined ".repeat(2000)).unwrap();
+    let app = app_in(&dir);
+    let window = window(&app);
+    let call = |command: &str, body: Value| call(&window, command, body);
+    assert!(call("database_status", json!({})).is_err());
+    assert!(call("data_summary", json!({})).is_err());
+    assert_eq!(call("can_restore", json!({})), Ok(json!(true)));
+    check_backup(&app.state::<Database>(), &file).unwrap_or_else(|error| panic!("{error}"));
+    assert!(call("confirm_restore", json!({})).unwrap().as_str().unwrap().starts_with("unreadable-"));
+    assert_eq!(call("database_status", json!({})), Ok(Value::Null));
+  }
+
+  #[test]
+  fn a_second_copy_cannot_touch_the_data() {
+    let dir = TempDir::new();
+    let _first = app_in(&dir);
+    let second = app_in(&dir);
+    let window = window(&second);
+    let call = |command: &str| call(&window, command, json!({}));
+    assert!(call("database_status").unwrap_err().to_string().contains("already open"));
+    assert_eq!(call("can_restore"), Ok(json!(false)));
+    for command in ["confirm_restore", "cancel_restore", "data_summary", "import_history"] {
+      assert!(call(command).is_err(), "{command}");
+    }
   }
 
   #[test]
