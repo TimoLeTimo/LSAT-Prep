@@ -18,6 +18,7 @@ The exact tables are in `src-tauri/migrations/`; those files are authoritative. 
   - Ending early (`abandoned`) submits nothing more and keeps answers already submitted.
   - Answers are marked against the saved copy. The interface receives the key and explanations only after an answer is submitted or the session is finished.
   - One targeted session per section can be unfinished at a time.
+  - A flag lasts for its session. A bookmark belongs to the question and can also change while reviewing a finished session.
 - Content with history or bookmarks cannot be deleted. Retire it instead.
 - The session clock runs in Rust (`practice/clock.rs`) while the practice screen is open, and `active_ms` stores the time it has run.
   - It pauses when the user leaves the screen or closes the app, but not when the window is hidden. It relies on a system clock that should stop during sleep.

@@ -31,7 +31,10 @@ export interface SessionQuestion {
   choices: { label: ChoiceLabel; text: string }[]
   passage: { title: string; texts: { label: 'A' | 'B'; text: string }[] } | null
   selected: ChoiceLabel | null
+  /** Lasts only for this session. */
   is_flagged: boolean
+  /** Stays with the question after the session. */
+  is_bookmarked: boolean
   time_spent_seconds: number
   is_submitted: boolean
   outcome: Outcome | null
@@ -63,6 +66,8 @@ export const practiceSession = {
     invoke<Session>('create_session', { config, questionIds }),
   select: (id: string, choice: ChoiceLabel | null) => invoke<void>('select_answer', { id, choice }),
   flag: (id: string, flagged: boolean) => invoke<void>('flag_question', { id, flagged }),
+  bookmark: (questionId: string, bookmarked: boolean) =>
+    invoke<void>('set_bookmark', { questionId, bookmarked }),
   addTime: (id: string, seconds: number) => invoke<void>('add_question_time', { id, seconds }),
   setPosition: (sessionId: string, position: number) =>
     invoke<void>('set_session_position', { sessionId, position }),

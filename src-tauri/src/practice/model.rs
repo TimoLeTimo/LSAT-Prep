@@ -78,7 +78,10 @@ pub struct SessionQuestion {
   pub choices: Vec<LabeledText>,
   pub passage: Option<PassageView>,
   pub selected: Option<Label>,
+  /// Lasts only for this session.
   pub is_flagged: bool,
+  /// Stays with the question after the session.
+  pub is_bookmarked: bool,
   pub time_spent_seconds: i64,
   pub is_submitted: bool,
   /// Null until the answer is submitted or the session is completed.
@@ -86,6 +89,7 @@ pub struct SessionQuestion {
 }
 
 impl SessionQuestion {
+  #[expect(clippy::too_many_arguments, reason = "one argument for each stored value")]
   pub fn new(
     id: String,
     snapshot: Snapshot,
@@ -93,6 +97,7 @@ impl SessionQuestion {
     is_flagged: bool,
     time_spent_seconds: i64,
     is_correct: Option<bool>,
+    is_bookmarked: bool,
     status: Status,
   ) -> Self {
     let Snapshot { category_name, question, passage, .. } = snapshot;
@@ -117,6 +122,7 @@ impl SessionQuestion {
       passage: passage.map(|passage| PassageView { title: passage.title, texts: passage.texts }),
       selected,
       is_flagged,
+      is_bookmarked,
       time_spent_seconds,
       is_submitted,
       outcome,

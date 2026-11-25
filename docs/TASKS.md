@@ -47,15 +47,15 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [ ] Review, approve, and import the seed question set.
 
 ## Milestone 3 — Logical Reasoning
-- [ ] Try the practice screen in the real window.
+- [x] Try the practice screen in the real window (starting, answering, checking, and saving).
 - [x] Session engine: start, save, recover, submit, finish, and end early (no screens yet).
 - [x] Random question selection without repeats.
 - [x] Question display.
 - [x] Answer selection.
 - [x] Next/previous navigation.
 - [ ] Timer. (Built; real-window and sleep checks remain.)
-- [ ] Bookmarking.
-- [ ] Explanations.
+- [ ] Bookmarking. (Built; real-window check remains.)
+- [ ] Explanations. (Built; real-window check remains.)
 - [ ] Autosave and session recovery. (Built; real-window check remains.)
 
 ## Milestone 4 — Reading Comprehension

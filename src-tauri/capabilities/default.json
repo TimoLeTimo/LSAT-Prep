@@ -28,6 +28,7 @@
     "allow-abandon-session",
     "allow-start-clock",
     "allow-save-clock",
-    "allow-pause-clock"
+    "allow-pause-clock",
+    "allow-set-bookmark"
   ]
 }

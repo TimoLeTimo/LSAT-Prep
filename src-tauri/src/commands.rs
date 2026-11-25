@@ -173,6 +173,15 @@ pub fn flag_question(id: String, flagged: bool, database: State<Database>) -> Re
 }
 
 #[tauri::command(async)]
+pub fn set_bookmark(
+  question_id: String,
+  bookmarked: bool,
+  database: State<Database>,
+) -> Result<(), String> {
+  practice::set_bookmark(&mut *database.get()?, &question_id, bookmarked).map_err(text)
+}
+
+#[tauri::command(async)]
 pub fn add_question_time(
   id: String,
   seconds: i64,
@@ -372,6 +381,7 @@ mod tests {
     for (command, body) in [
       ("select_answer", json!({ "id": question, "choice": "C" })),
       ("flag_question", json!({ "id": question, "flagged": true })),
+      ("set_bookmark", json!({ "questionId": "test-lr-1", "bookmarked": true })),
       ("add_question_time", json!({ "id": question, "seconds": 5 })),
       ("set_session_position", json!({ "sessionId": id, "position": 0 })),
     ] {
@@ -379,6 +389,7 @@ mod tests {
     }
     let resumed = call("unfinished_session", section.clone()).unwrap();
     assert_eq!(resumed["questions"][0]["selected"], "C");
+    assert_eq!(resumed["questions"][0]["is_bookmarked"], true);
     let checked = call("submit_answer", json!({ "id": question })).unwrap();
     assert_eq!(checked["questions"][0]["outcome"]["is_correct"], true);
     let done = call("finish_session", json!({ "sessionId": id })).unwrap();

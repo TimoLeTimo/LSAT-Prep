@@ -390,6 +390,78 @@ fn the_same_question_can_be_practiced_again_later() {
   assert_eq!(results, [false, true]);
 }
 
+// ---------------------------------------------------------------- Bookmarks
+
+fn bookmarks(conn: &Connection) -> Vec<(String, String)> {
+  conn
+    .prepare("SELECT id, question_id FROM bookmarks ORDER BY question_id")
+    .unwrap()
+    .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+    .unwrap()
+    .collect::<rusqlite::Result<_>>()
+    .unwrap()
+}
+
+#[test]
+fn bookmarks_outlast_the_session_and_appear_in_later_ones() {
+  let dir = TempDir::new();
+  let mut conn = database(&dir);
+  let session = start(&mut conn, Explanations::AtEnd);
+  set_bookmark(&mut conn, "test-lr-1", true).unwrap();
+  let shown = |conn: &Connection, id: &str| -> Vec<bool> {
+    load(conn, id).unwrap().questions.iter().map(|question| question.is_bookmarked).collect()
+  };
+  assert_eq!(shown(&conn, &session.id), [false, true, false]);
+  finish(&mut conn, &session.id).unwrap();
+  let later = create(&mut conn, &config(Explanations::AtEnd, 2), &ids(&[1, 4])).unwrap();
+  assert_eq!(shown(&conn, &later.id), [true, false]);
+  // Reviewing a finished session can still change them.
+  set_bookmark(&mut conn, "test-lr-3", true).unwrap();
+  set_bookmark(&mut conn, "test-lr-1", false).unwrap();
+  assert_eq!(shown(&conn, &session.id), [true, false, false]);
+}
+
+#[test]
+fn repeating_a_bookmark_changes_nothing() {
+  let dir = TempDir::new();
+  let mut conn = database(&dir);
+  set_bookmark(&mut conn, "test-lr-1", true).unwrap();
+  conn.execute("UPDATE bookmarks SET note = 'mine'", []).unwrap();
+  let before = bookmarks(&conn);
+  set_bookmark(&mut conn, "test-lr-1", true).unwrap();
+  assert_eq!(bookmarks(&conn), before);
+  let note: String = conn.query_row("SELECT note FROM bookmarks", [], |row| row.get(0)).unwrap();
+  assert_eq!(note, "mine");
+  for _ in 0..2 {
+    set_bookmark(&mut conn, "test-lr-1", false).unwrap();
+  }
+  assert!(bookmarks(&conn).is_empty());
+}
+
+#[test]
+fn removing_a_bookmark_leaves_others_and_history_alone() {
+  let dir = TempDir::new();
+  let mut conn = database(&dir);
+  let session = start(&mut conn, Explanations::AtEnd);
+  select(&mut conn, &session.questions[0].id, Some(Label::C)).unwrap();
+  finish(&mut conn, &session.id).unwrap();
+  for id in ["test-lr-1", "test-lr-3"] {
+    set_bookmark(&mut conn, id, true).unwrap();
+  }
+  set_bookmark(&mut conn, "test-lr-3", false).unwrap();
+  assert_eq!(bookmarks(&conn).len(), 1);
+  assert_eq!(attempts(&conn).len(), 1);
+}
+
+#[test]
+fn cannot_bookmark_an_unknown_question_but_can_bookmark_a_retired_one() {
+  let dir = TempDir::new();
+  let mut conn = database(&dir);
+  assert!(refusal(set_bookmark(&mut conn, "missing", true)).contains("not found"));
+  conn.execute("UPDATE questions SET status = 'retired'", []).unwrap();
+  set_bookmark(&mut conn, "test-lr-1", true).unwrap();
+}
+
 // ---------------------------------------------------------------- Clock
 
 /// A 60-second session with question 1 answered, and a moment to count from.

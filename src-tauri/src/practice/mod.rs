@@ -176,7 +176,8 @@ pub fn load(conn: &Connection, id: &str) -> Result<Session> {
   let questions = conn
     .prepare_cached(
       "SELECT s.id, s.content_snapshot_json, s.selected_choice_id, s.is_flagged,
-         s.time_spent_seconds, a.is_correct
+         s.time_spent_seconds, a.is_correct,
+         EXISTS (SELECT 1 FROM bookmarks b WHERE b.question_id = s.question_id)
        FROM session_questions s LEFT JOIN attempts a ON a.session_question_id = s.id
        WHERE s.session_id = ?1 ORDER BY s.display_order",
     )?
@@ -190,6 +191,7 @@ pub fn load(conn: &Connection, id: &str) -> Result<Session> {
         row.get(3)?,
         row.get(4)?,
         row.get(5)?,
+        row.get(6)?,
         status,
       ))
     })?
@@ -272,6 +274,30 @@ pub fn select(conn: &mut Connection, id: &str, choice: Option<Label>) -> Result<
        answered_at = CASE WHEN ?2 IS NULL THEN NULL ELSE ?3 END WHERE id = ?1",
     params![id, selected, time],
   )?;
+  Ok(tx.commit()?)
+}
+
+/// Bookmarks belong to the question, not the session, so they can change at any time and
+/// remain afterward. Repeating a change has no effect.
+pub fn set_bookmark(conn: &mut Connection, question_id: &str, bookmarked: bool) -> Result<()> {
+  let tx = begin(conn)?;
+  let exists: bool = tx.query_row(
+    "SELECT EXISTS (SELECT 1 FROM questions WHERE id = ?1)",
+    [question_id],
+    |row| row.get(0),
+  )?;
+  if !exists {
+    return Err(PracticeError::Refused("This question was not found."));
+  }
+  if bookmarked {
+    tx.execute(
+      "INSERT INTO bookmarks (id, question_id, created_at) VALUES (?1, ?2, ?3)
+       ON CONFLICT (question_id) DO NOTHING",
+      params![new_id(&tx)?, question_id, now(&tx)?],
+    )?;
+  } else {
+    tx.execute("DELETE FROM bookmarks WHERE question_id = ?1", [question_id])?;
+  }
   Ok(tx.commit()?)
 }
 

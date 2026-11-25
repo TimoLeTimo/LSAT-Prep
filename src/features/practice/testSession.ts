@@ -14,6 +14,7 @@ export function testSessionQuestion(id: string): SessionQuestion {
     passage: null,
     selected: null,
     is_flagged: false,
+    is_bookmarked: false,
     time_spent_seconds: 0,
     is_submitted: false,
     outcome: null,

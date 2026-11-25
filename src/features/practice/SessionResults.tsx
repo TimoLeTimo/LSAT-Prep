@@ -1,10 +1,42 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../components/Button'
 import { count } from '../../components/count'
-import type { Session, SessionQuestion } from '../../data/practiceSession'
+import { resultText } from './resultText'
+import { SaveError } from './SaveError'
 import { score } from './score'
+import type { SessionController, SessionState } from './SessionController'
+import { SessionReview } from './SessionReview'
 
-export function SessionResults({ session, onDone }: { session: Session; onDone: () => void }) {
+interface SessionResultsProps {
+  controller: SessionController
+  state: SessionState
+  onDone: () => void
+}
+
+export function SessionResults({ controller, state, onDone }: SessionResultsProps) {
+  const [reviewing, setReviewing] = useState<number | null>(null)
+  if (reviewing !== null) {
+    return (
+      <SessionReview
+        controller={controller}
+        state={state}
+        position={reviewing}
+        onGoTo={setReviewing}
+        onBack={() => setReviewing(null)}
+      />
+    )
+  }
+  return (
+    <Summary controller={controller} state={state} onReview={setReviewing} onDone={onDone} />
+  )
+}
+
+interface SummaryProps extends SessionResultsProps {
+  onReview: (position: number) => void
+}
+
+function Summary({ controller, state, onReview, onDone }: SummaryProps) {
+  const { session } = state
   const heading = useRef<HTMLHeadingElement>(null)
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -19,6 +51,7 @@ export function SessionResults({ session, onDone }: { session: Session; onDone: 
       <h2 ref={heading} tabIndex={-1} className="font-serif text-2xl font-semibold outline-none">
         Session Results
       </h2>
+      <SaveError error={state.error} onDismiss={controller.dismissError} />
       <div className="mt-4 rounded-2xl border border-line bg-surface p-6 shadow-card">
         <p className="text-xl font-medium">
           {answered === 0
@@ -32,13 +65,21 @@ export function SessionResults({ session, onDone }: { session: Session; onDone: 
           <p className="mt-1 text-muted">{count(unanswered, 'question')} not answered</p>
         )}
       </div>
-      <ol className="mt-6 divide-y divide-line rounded-2xl border border-line bg-surface shadow-card">
+      <p className="mt-6 text-muted">Choose a question to see its explanations.</p>
+      <ol className="mt-3 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
         {session.questions.map((question, index) => (
-          <li key={question.id} className="flex flex-wrap justify-between gap-x-6 px-6 py-3">
-            <span>
-              Question {index + 1} <span className="text-muted">– {question.category_name}</span>
-            </span>
-            <span className="font-medium">{resultText(question)}</span>
+          <li key={question.id}>
+            <button
+              type="button"
+              onClick={() => onReview(index)}
+              className="flex w-full cursor-pointer flex-wrap justify-between gap-x-6 px-6 py-3 text-left -outline-offset-2 hover:bg-blush"
+            >
+              <span>
+                Question {index + 1} <span className="text-muted">– {question.category_name}</span>
+                {question.is_bookmarked && <span className="text-rose-deep"> · Bookmarked</span>}
+              </span>
+              <span className="font-medium">{resultText(question)}</span>
+            </button>
           </li>
         ))}
       </ol>
@@ -47,10 +88,4 @@ export function SessionResults({ session, onDone }: { session: Session; onDone: 
       </div>
     </div>
   )
-}
-
-function resultText({ outcome, selected }: SessionQuestion) {
-  if (outcome === null || outcome.is_correct === null) return 'Not answered'
-  if (outcome.is_correct) return `✓ Correct (${selected})`
-  return `✗ Incorrect (${selected}; correct answer ${outcome.correct_choice})`
 }

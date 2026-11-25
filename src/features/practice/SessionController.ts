@@ -6,6 +6,7 @@ type Api = Pick<
   PracticeSessionApi,
   | 'select'
   | 'flag'
+  | 'bookmark'
   | 'addTime'
   | 'setPosition'
   | 'submit'
@@ -19,7 +20,7 @@ export interface SessionState {
   /** What to show. An unsaved selection is listed in `unsaved` until it is saved. */
   session: Session
   position: number
-  /** IDs of session questions whose selection or flag is still being saved. */
+  /** IDs of session questions with a change still being saved. */
   unsaved: ReadonlySet<string>
   /** Set while an answer or the whole session is being submitted. */
   isSubmitting: boolean
@@ -30,6 +31,9 @@ export interface SessionState {
 
 const MAX_SECONDS_PER_SAVE = 600
 
+type SavedField = 'selected' | 'is_flagged' | 'is_bookmarked'
+const SAVED_FIELDS: readonly SavedField[] = ['selected', 'is_flagged', 'is_bookmarked']
+
 /**
  * Runs one practice session. Saves happen one at a time, in order. A change that cannot
  * be saved is put back to the last saved value, so the screen never claims otherwise.
@@ -39,7 +43,7 @@ export class SessionController {
   private readonly listeners = new Set<() => void>()
   private queue: Promise<unknown> = Promise.resolve()
   /** The last values known to be saved. */
-  private readonly saved = new Map<string, Pick<SessionQuestion, 'selected' | 'is_flagged'>>()
+  private readonly saved = new Map<string, Pick<SessionQuestion, SavedField>>()
   /** The newest change to each value; older results must not overwrite it. */
   private readonly latest = new Map<string, number>()
   private changes = 0
@@ -95,6 +99,16 @@ export class SessionController {
     const { id, is_flagged } = this.current
     if (!this.canChange) return
     this.change(id, 'is_flagged', !is_flagged, () => this.api.flag(id, !is_flagged))
+  }
+
+  /** Bookmarks can change after the session too, while reviewing it. */
+  readonly toggleBookmark = (id: string) => {
+    const question = this.state.session.questions.find((item) => item.id === id)
+    if (!question || this.state.isSubmitting) return
+    const { question_id, is_bookmarked } = question
+    this.change(id, 'is_bookmarked', !is_bookmarked, () =>
+      this.api.bookmark(question_id, !is_bookmarked),
+    )
   }
 
   readonly goTo = (position: number) => {
@@ -211,7 +225,7 @@ export class SessionController {
     }
   }
 
-  private change<K extends 'selected' | 'is_flagged'>(
+  private change<K extends SavedField>(
     id: string,
     field: K,
     value: SessionQuestion[K],
@@ -232,14 +246,17 @@ export class SessionController {
         if (this.latest.get(key) !== number) return
         void this.saveClock() // the answer may have been refused because time is up
         this.show(id, { [field]: this.saved.get(id)![field] })
-        this.fail(error, () => {
-          if (this.canChange) this.change(id, field, value, save)
+        const canRetry = () =>
+          field === 'is_bookmarked' ? !this.state.isSubmitting : this.canChange
+        if (!this.isActive && field !== 'is_bookmarked') return
+        this.showError(error, () => {
+          if (canRetry()) this.change(id, field, value, save)
         })
       })
       .finally(() => {
         if (this.latest.get(key) !== number) return
         this.latest.delete(key)
-        const stillSaving = ['selected', 'is_flagged'].some((name) => this.latest.has(`${name}:${id}`))
+        const stillSaving = SAVED_FIELDS.some((name) => this.latest.has(`${name}:${id}`))
         if (stillSaving) return
         const unsaved = new Set(this.state.unsaved)
         unsaved.delete(id)
@@ -284,7 +301,9 @@ export class SessionController {
   }
 
   private remember({ questions }: Session) {
-    for (const { id, selected, is_flagged } of questions) this.saved.set(id, { selected, is_flagged })
+    for (const { id, selected, is_flagged, is_bookmarked } of questions) {
+      this.saved.set(id, { selected, is_flagged, is_bookmarked })
+    }
   }
 
   private show(id: string, values: Partial<SessionQuestion>) {
@@ -294,7 +313,10 @@ export class SessionController {
   }
 
   private fail(error: unknown, retry: () => void) {
-    if (!this.isActive) return
+    if (this.isActive) this.showError(error, retry)
+  }
+
+  private showError(error: unknown, retry: () => void) {
     const message = errorMessage(error, 'Your work could not be saved.')
     this.update({
       error: {

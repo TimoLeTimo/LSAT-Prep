@@ -32,6 +32,7 @@ function setup(session: Session = testSession()) {
   const api = {
     select: vi.fn(record('select')),
     flag: vi.fn(record('flag')),
+    bookmark: vi.fn(record('bookmark')),
     addTime: vi.fn(record('time')),
     setPosition: vi.fn(record('position')),
     submit: vi.fn(result('submit')),
@@ -401,4 +402,54 @@ it('does not start the clock of a session that has ended', async () => {
   test.controller.startClock()
   await test.controller.pauseClock()
   expect(test.log).toEqual([])
+})
+
+// Bookmarks
+
+it('saves bookmarks by question, and puts one back when it fails', async () => {
+  const test = setup()
+  test.controller.toggleBookmark('b')
+  await tick()
+  expect(test.log).toEqual(['bookmark question-b true'])
+  test.api.bookmark.mockRejectedValueOnce('Failed.')
+  test.controller.toggleBookmark('b')
+  await tick()
+  expect(test.state.session.questions[1].is_bookmarked).toBe(true)
+  expect(test.state.error?.message).toBe('Failed.')
+  test.state.error!.retry()
+  await tick()
+  expect(test.state.session.questions[1].is_bookmarked).toBe(false)
+})
+
+it('can bookmark while reviewing a finished session, and reports failures', async () => {
+  const test = setup(completed())
+  test.controller.toggleBookmark('a')
+  await tick()
+  expect(test.state.session.questions[0].is_bookmarked).toBe(true)
+  test.api.bookmark.mockRejectedValueOnce('Failed.')
+  test.controller.toggleBookmark('a')
+  await tick()
+  expect(test.state.session.questions[0].is_bookmarked).toBe(true)
+  test.state.error!.retry()
+  await tick()
+  expect(test.state.session.questions[0].is_bookmarked).toBe(false)
+  expect(test.state.error).toBeNull()
+})
+
+it('keeps a selection when a bookmark on the same question fails', async () => {
+  const test = setup()
+  test.api.bookmark.mockRejectedValueOnce('Failed.')
+  test.controller.select('A')
+  test.controller.toggleBookmark('a')
+  await tick()
+  expect(test.controller.current).toMatchObject({ selected: 'A', is_bookmarked: false })
+})
+
+it('a double click on a bookmark ends where it began', async () => {
+  const test = setup()
+  test.controller.toggleBookmark('a')
+  test.controller.toggleBookmark('a')
+  await tick()
+  expect(test.state.session.questions[0].is_bookmarked).toBe(false)
+  expect(test.api.bookmark).toHaveBeenLastCalledWith('question-a', false)
 })

@@ -4,11 +4,15 @@ import { count } from '../../components/count'
 import { practiceSession, type Session, type SessionQuestion } from '../../data/practiceSession'
 import { CHOICE_LABELS, type ChoiceLabel } from '../../domain/content/types'
 import { ChoiceList } from './ChoiceList'
+import { ExplanationList } from './ExplanationList'
 import { FinishDialog } from './FinishDialog'
+import { QuestionContent } from './QuestionContent'
 import { QuestionNav } from './QuestionNav'
+import { SaveError } from './SaveError'
 import { SessionController } from './SessionController'
 import { SessionResults } from './SessionResults'
 import { SessionTimer } from './SessionTimer'
+import { ToggleButton } from './ToggleButton'
 import { useQuestionTime } from './useQuestionTime'
 import { useSessionClock } from './useSessionClock'
 
@@ -38,6 +42,7 @@ export function SessionScreen({ session: initial, onDone }: SessionScreenProps) 
 
   // A–E select and the arrows move. Nothing that locks an answer has a single key.
   useEffect(() => {
+    if (!isActive) return
     function onKeyDown(event: KeyboardEvent) {
       if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return
       if (document.querySelector('dialog[open]') !== null) return
@@ -51,9 +56,9 @@ export function SessionScreen({ session: initial, onDone }: SessionScreenProps) 
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [controller])
+  }, [controller, isActive])
 
-  if (!isActive) return <SessionResults session={session} onDone={onDone} />
+  if (!isActive) return <SessionResults controller={controller} state={state} onDone={onDone} />
 
   const checksEach = session.config.explanations === 'after_each'
   const total = session.questions.length
@@ -75,23 +80,24 @@ export function SessionScreen({ session: initial, onDone }: SessionScreenProps) 
         >
           Question {position + 1} of {total}
         </h2>
-        <button
-          type="button"
-          aria-pressed={question.is_flagged}
-          onClick={controller.toggleFlag}
-          className="cursor-pointer rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium hover:bg-blush aria-pressed:border-rose-accent aria-pressed:bg-blush aria-pressed:text-rose-deep"
-        >
-          {question.is_flagged ? 'Flagged' : 'Flag'}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <ToggleButton
+            isOn={question.is_flagged}
+            onLabel="Remove Flag"
+            offLabel="Flag"
+            onClick={controller.toggleFlag}
+          />
+          <ToggleButton
+            isOn={question.is_bookmarked}
+            onLabel="Remove Bookmark"
+            offLabel="Bookmark"
+            onClick={() => controller.toggleBookmark(question.id)}
+          />
+        </div>
       </div>
       <p className="mt-1 text-sm text-muted">{question.category_name}</p>
 
-      <div className="mt-5 space-y-5 text-lg leading-relaxed whitespace-pre-line wrap-anywhere">
-        {question.stimulus !== null && <p>{question.stimulus}</p>}
-        <p id="prompt" className="font-medium">
-          {question.prompt}
-        </p>
-      </div>
+      <QuestionContent question={question} />
       <ChoiceList
         question={question}
         isDisabled={question.is_submitted || isSubmitting}
@@ -101,18 +107,8 @@ export function SessionScreen({ session: initial, onDone }: SessionScreenProps) 
       <p className="mt-3 min-h-6 text-sm text-muted" role="status">
         {statusText(question, unsaved.has(question.id))}
       </p>
-      {error !== null && (
-        <div role="alert" className="mt-2 rounded-lg border border-rose-accent bg-blush p-4">
-          <p className="font-medium">This was not saved.</p>
-          <p className="mt-1 wrap-anywhere">{error.message}</p>
-          <div className="mt-3 flex gap-3">
-            <Button onClick={error.retry}>Try Again</Button>
-            <Button variant="secondary" onClick={controller.dismissError}>
-              Dismiss
-            </Button>
-          </div>
-        </div>
-      )}
+      <SaveError error={error} onDismiss={controller.dismissError} />
+      <ExplanationList question={question} />
 
       <div className="mt-4 flex flex-wrap gap-3 border-t border-line pt-6">
         <Button variant="secondary" onClick={controller.previous} disabled={position === 0}>

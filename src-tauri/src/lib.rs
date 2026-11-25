@@ -40,6 +40,7 @@ fn configure<R: Runtime>(builder: Builder<R>) -> Builder<R> {
       commands::start_clock,
       commands::save_clock,
       commands::pause_clock,
+      commands::set_bookmark,
     ])
 }
 
