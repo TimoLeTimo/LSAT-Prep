@@ -18,10 +18,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
@@ -29,15 +29,26 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
       - name: Install dependencies
         run: npm ci
 
       - name: Build macOS application
-        run: npm run build:mac
+        run: npm run tauri -- build --bundles app
 
-      - name: Upload DMG installer
-        uses: actions/upload-artifact@v4
+      - name: Compress application
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            "src-tauri/target/release/bundle/macos/LSAT Prep.app" \
+            "LSAT-Prep-${{ matrix.arch }}.zip"
+
+      - name: Upload application
+        uses: actions/upload-artifact@v5
         with:
           name: LSAT-Prep-macOS-${{ matrix.arch }}
-          path: src-tauri/target/release/bundle/dmg/*.dmg
+          path: LSAT-Prep-${{ matrix.arch }}.zip
           if-no-files-found: error
