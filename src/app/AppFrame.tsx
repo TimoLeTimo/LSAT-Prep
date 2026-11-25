@@ -45,7 +45,7 @@ export function AppFrame({ route, title, children }: AppFrameProps) {
           </a>
         </div>
       </header>
-      <main ref={mainRef} className="mx-auto w-full max-w-5xl flex-1 px-6 py-10 sm:py-14">
+      <main ref={mainRef} className="mx-auto w-full max-w-5xl flex-1 px-6 py-10 has-[[data-wide]]:max-w-[87.5rem] sm:py-14">
         {children}
       </main>
     </div>

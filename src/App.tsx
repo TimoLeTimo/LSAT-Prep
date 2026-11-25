@@ -3,7 +3,8 @@ import { MainMenu } from './app/MainMenu'
 import { destinations, type Route } from './app/routes'
 import { useRoute } from './app/useRoute'
 import { PlaceholderScreen } from './components/PlaceholderScreen'
-import { LogicalReasoningScreen } from './features/logical-reasoning/LogicalReasoningScreen'
+import type { Section } from './domain/content/types'
+import { PracticeScreen } from './features/practice/PracticeScreen'
 import { QuestionBankScreen } from './features/question-bank/QuestionBankScreen'
 import { SettingsScreen } from './features/settings/SettingsScreen'
 
@@ -12,9 +13,15 @@ const otherTitles: Partial<Record<Route, string>> = {
   'question-bank': 'Question Bank Management',
 }
 
+const practiceSections: Partial<Record<Route, Section>> = {
+  'logical-reasoning': 'logical_reasoning',
+  'reading-comprehension': 'reading_comprehension',
+}
+
 function App() {
   const route = useRoute()
   const destination = destinations.find(({ id }) => id === route)
+  const practiceSection = practiceSections[route]
   const title = destination?.title ?? otherTitles[route] ?? 'Main Menu'
 
   return (
@@ -22,8 +29,8 @@ function App() {
       {route === 'menu' && <MainMenu />}
       {route === 'settings' && <SettingsScreen />}
       {route === 'question-bank' && <QuestionBankScreen />}
-      {route === 'logical-reasoning' && <LogicalReasoningScreen />}
-      {destination && route !== 'logical-reasoning' && <PlaceholderScreen key={route} title={title} />}
+      {practiceSection && <PracticeScreen key={route} section={practiceSection} />}
+      {destination && !practiceSection && <PlaceholderScreen key={route} title={title} />}
     </AppFrame>
   )
 }

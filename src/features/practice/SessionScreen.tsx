@@ -6,6 +6,7 @@ import { CHOICE_LABELS, type ChoiceLabel } from '../../domain/content/types'
 import { ChoiceList } from './ChoiceList'
 import { ExplanationList } from './ExplanationList'
 import { FinishDialog } from './FinishDialog'
+import { PassagePane } from './PassagePane'
 import { QuestionContent } from './QuestionContent'
 import { QuestionNav } from './QuestionNav'
 import { SaveError } from './SaveError'
@@ -26,19 +27,27 @@ export function SessionScreen({ session: initial, onDone }: SessionScreenProps) 
   const state = useSyncExternalStore(controller.subscribe, controller.getState)
   const [isFinishing, setIsFinishing] = useState(false)
   const heading = useRef<HTMLHeadingElement>(null)
+  const screen = useRef<HTMLDivElement>(null)
+  const questionPane = useRef<HTMLDivElement>(null)
+  const [scrollPositions] = useState(() => new Map<string, number>())
 
   const { session, position, unsaved, isSubmitting, error } = state
   const question = session.questions[position]
+  const { passage } = question
+  const hasPassage = passage !== null
   const isActive = session.status === 'in_progress'
   useQuestionTime(controller, isActive && !question.is_submitted ? question.id : null)
 
   useSessionClock(controller, isActive)
 
-  // A new question starts at the top, with keyboard focus on its heading.
+  // A new question starts at the top, with keyboard focus on its heading. Beside a
+  // passage, only the question's side returns to the top.
   useEffect(() => {
-    window.scrollTo(0, 0)
-    heading.current?.focus()
-  }, [position])
+    if (questionPane.current) questionPane.current.scrollTop = 0
+    if (hasPassage) screen.current?.scrollIntoView({ block: 'start' })
+    else window.scrollTo(0, 0)
+    heading.current?.focus({ preventScroll: true })
+  }, [position, hasPassage])
 
   // A–E select and the arrows move. Nothing that locks an answer has a single key.
   useEffect(() => {
@@ -64,15 +73,9 @@ export function SessionScreen({ session: initial, onDone }: SessionScreenProps) 
   const total = session.questions.length
   const unanswered = session.questions.filter(({ selected }) => selected === null).length
 
-  return (
-    <div className="mx-auto max-w-3xl">
-      <div className="flex flex-wrap-reverse items-start justify-between gap-x-6 gap-y-3">
-        <QuestionNav questions={session.questions} position={position} onGoTo={controller.goTo} />
-        {session.config.time_limit_seconds !== null && (
-          <SessionTimer controller={controller} limitSeconds={session.config.time_limit_seconds} />
-        )}
-      </div>
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+  const questionArea = (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
         <h2
           ref={heading}
           tabIndex={-1}
@@ -127,6 +130,31 @@ export function SessionScreen({ session: initial, onDone }: SessionScreenProps) 
           Finish
         </Button>
       </div>
+    </>
+  )
+
+  return (
+    <div
+      ref={screen}
+      data-wide={hasPassage || undefined}
+      className={hasPassage ? 'scroll-mt-4' : 'mx-auto max-w-3xl'}
+    >
+      <div className="flex flex-wrap-reverse items-start justify-between gap-x-6 gap-y-3">
+        <QuestionNav questions={session.questions} position={position} onGoTo={controller.goTo} />
+        {session.config.time_limit_seconds !== null && (
+          <SessionTimer controller={controller} limitSeconds={session.config.time_limit_seconds} />
+        )}
+      </div>
+      {passage === null ? (
+        <div className="mt-6">{questionArea}</div>
+      ) : (
+        <div className="mt-4 grid gap-6 lg:h-[calc(100svh-10rem)] lg:min-h-96 lg:grid-cols-2">
+          <PassagePane key={passage.id} passage={passage} scrollPositions={scrollPositions} />
+          <div ref={questionPane} className="min-w-0 lg:overflow-y-auto lg:px-2 lg:pb-2">
+            {questionArea}
+          </div>
+        </div>
+      )}
 
       {isFinishing && (
         <FinishDialog

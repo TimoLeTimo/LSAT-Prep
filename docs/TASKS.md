@@ -59,12 +59,13 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [ ] Autosave and session recovery. (Built; real-window check remains.)
 
 ## Milestone 4 — Reading Comprehension
-- [x] Choose whole passage sets and start RC sessions (no screens yet).
-- [ ] Passage display.
-- [ ] Passage-question association.
-- [ ] Comparative passages.
-- [ ] Question navigation.
-- [ ] Autosave and timing.
+- [x] Choose whole passage sets and start RC sessions.
+- [ ] Passage display. (Built; real-window check remains.)
+- [x] Passage-question association.
+- [ ] Comparative passages. (Built; real-window check remains.)
+- [ ] Question navigation. (Built; real-window check remains.)
+- [ ] Autosave and timing. (Built; real-window check remains.)
+- [ ] Review with the passage visible.
 
 ## Milestone 5 — Custom Practice
 - [ ] Section selection.

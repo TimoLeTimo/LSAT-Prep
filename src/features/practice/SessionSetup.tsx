@@ -7,12 +7,16 @@ import { practiceSession, type Session, type SessionConfig } from '../../data/pr
 import type { QuestionIndex } from '../../data/questionBank'
 import { difficultyNames } from '../../domain/content/names'
 import { DIFFICULTIES, type Section } from '../../domain/content/types'
+import { choosePassages, findPassageSets } from '../../domain/practice/choosePassages'
 import { chooseQuestions } from '../../domain/practice/chooseQuestions'
-import { filterQuestions } from '../../domain/practice/filterQuestions'
+import { filterQuestions, type QuestionFilter } from '../../domain/practice/filterQuestions'
 
-const MAX_QUESTIONS = 500
+/** LR sessions are chosen by question, and RC sessions by whole passage. */
+const amounts = {
+  logical_reasoning: { unit: 'question', label: 'Number of questions', max: 500, usual: 10 },
+  reading_comprehension: { unit: 'passage', label: 'Number of passages', max: 50, usual: 4 },
+}
 const MAX_MINUTES = 360
-const DEFAULT_QUESTIONS = 10
 
 interface SessionSetupProps {
   section: Section
@@ -26,8 +30,14 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
   const [categoryIds, setCategoryIds] = useState<string[]>([])
   const [difficulties, setDifficulties] = useState<SessionConfig['difficulties']>([])
   const inSection = { section, categoryIds: [], difficulties: [] }
-  const total = filterQuestions(index.questions, inSection).length
-  const [wanted, setWanted] = useState(String(Math.min(DEFAULT_QUESTIONS, total)))
+  const { unit, label, max, usual } = amounts[section]
+  const isByPassage = unit === 'passage'
+  const countAvailable = (filter: QuestionFilter) =>
+    isByPassage
+      ? findPassageSets(index.questions, filter).length
+      : filterQuestions(index.questions, filter).length
+  const total = countAvailable(inSection)
+  const [wanted, setWanted] = useState(String(Math.min(usual, total)))
   const [explanations, setExplanations] = useState<SessionConfig['explanations']>('after_each')
   const [isTimed, setIsTimed] = useState(false)
   const [minutes, setMinutes] = useState('15')
@@ -49,7 +59,7 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
   }
 
   const filter = { section, categoryIds, difficulties }
-  const available = filterQuestions(index.questions, filter).length
+  const available = countAvailable(filter)
   const number = wholeNumber(wanted)
   const limit = wholeNumber(minutes)
   const timeProblem =
@@ -57,16 +67,25 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
       ? `Enter a number of minutes from 1 to ${MAX_MINUTES}.`
       : null
   const problem =
-    number < 1 || number > MAX_QUESTIONS
-      ? `Enter a number from 1 to ${MAX_QUESTIONS}.`
+    number < 1 || number > max
+      ? `Enter a number from 1 to ${max}.`
       : number > available
-        ? `Only ${count(available, 'matching question')} available. Choose fewer, or widen your choices.`
+        ? `Only ${count(available, `matching ${unit}`)} available. Choose fewer, or widen your choices.`
         : null
+
+  function choose(filter: QuestionFilter, wantedCount: number): string[] | null {
+    if (isByPassage) {
+      const chosen = choosePassages(index.questions, filter, wantedCount)
+      return chosen.ok ? chosen.questionIds : null
+    }
+    const chosen = chooseQuestions(index.questions, filter, wantedCount)
+    return chosen.ok ? chosen.ids : null
+  }
 
   async function start() {
     if (isStarting) return
-    const chosen = chooseQuestions(index.questions, filter, number)
-    if (!chosen.ok) return
+    const ids = choose(filter, number)
+    if (ids === null) return
     setIsStarting(true)
     setError(null)
     try {
@@ -74,17 +93,23 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
         section,
         category_ids: categoryIds,
         difficulties,
-        question_count: number,
+        question_count: ids.length,
         explanations,
-        passage_count: null,
+        passage_count: isByPassage ? number : null,
         time_limit_seconds: isTimed ? limit * 60 : null,
       }
-      onStarted(await practiceSession.create(config, chosen.ids))
+      onStarted(await practiceSession.create(config, ids))
     } catch (reason) {
       setError(errorMessage(reason, 'The session could not be started.'))
       setIsStarting(false)
       onStale()
     }
+  }
+
+  function availableText() {
+    if (!isByPassage) return `${count(available, 'question')} available`
+    const questions = findPassageSets(index.questions, filter).flatMap((set) => set.questionIds)
+    return `${count(available, 'passage')} available, with ${count(questions.length, 'question')}`
   }
 
   const categories = index.categories.filter((category) => category.section === section)
@@ -98,12 +123,15 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
     >
       <fieldset>
         <legend className="font-semibold">Categories</legend>
-        <p className="text-sm text-muted">Choose none to include all.</p>
+        <p className="text-sm text-muted">
+          Choose none to include all.
+          {isByPassage && ' Counts are passages. A chosen passage keeps all of its questions.'}
+        </p>
         <div className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
           {categories.map(({ id, name }) => (
             <Check
               key={id}
-              label={`${name} (${filterQuestions(index.questions, { section, categoryIds: [id], difficulties }).length})`}
+              label={`${name} (${countAvailable({ section, categoryIds: [id], difficulties })})`}
               checked={categoryIds.includes(id)}
               onChange={() => setCategoryIds(toggle(categoryIds, id))}
             />
@@ -126,7 +154,7 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
       </fieldset>
       <div>
         <label className="font-semibold" htmlFor="question-count">
-          Number of questions
+          {label}
         </label>
         <div className="mt-2 flex flex-wrap items-center gap-4">
           <input
@@ -139,7 +167,7 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
             className="w-24 rounded-lg border border-line bg-surface px-3 py-2"
           />
           <span id="question-count-help" role="status" className="text-sm text-muted">
-            {problem ?? `${count(available, 'question')} available`}
+            {problem ?? availableText()}
           </span>
         </div>
       </div>

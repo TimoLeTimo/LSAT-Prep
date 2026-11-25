@@ -7,20 +7,21 @@ import { PageHeading } from '../../components/PageHeading'
 import { errorMessage } from '../../data/errorMessage'
 import { practiceSession, type Session } from '../../data/practiceSession'
 import { getQuestionIndex, type QuestionIndex } from '../../data/questionBank'
-import { ResumePanel } from '../practice/ResumePanel'
-import { SessionScreen } from '../practice/SessionScreen'
-import { SessionSetup } from '../practice/SessionSetup'
+import { sectionNames } from '../../domain/content/names'
+import type { Section } from '../../domain/content/types'
+import { ResumePanel } from './ResumePanel'
+import { SessionScreen } from './SessionScreen'
+import { SessionSetup } from './SessionSetup'
 
-const section = 'logical_reasoning'
-
-export function LogicalReasoningScreen() {
+/** Setup, practice, and results for one section. */
+export function PracticeScreen({ section }: { section: Section }) {
   return (
     <>
       <BackLink href={routeHref('menu')}>Main Menu</BackLink>
-      <PageHeading>Logical Reasoning</PageHeading>
+      <PageHeading>{sectionNames[section]}</PageHeading>
       <div className="mt-8">
         {isTauri() ? (
-          <Practice />
+          <Practice section={section} />
         ) : (
           <p className="text-muted">Practice is only available in the desktop app.</p>
         )}
@@ -36,7 +37,7 @@ type View =
   | { name: 'resume'; session: Session }
   | { name: 'session'; session: Session }
 
-function Practice() {
+function Practice({ section }: { section: Section }) {
   const [view, setView] = useState<View>({ name: 'loading' })
   const [index, setIndex] = useState<QuestionIndex | null>(null)
 
@@ -50,7 +51,7 @@ function Practice() {
         setView({ name: 'error', message: errorMessage(error, 'Practice could not be opened.') })
       },
     )
-  }, [])
+  }, [section])
   useEffect(load, [load])
 
   // Read again, so the newest saved answers are used.
