@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use super::{
-  exam::{Exam, ExamClock, NewSection, Now, Phase, SectionStatus, create},
+  exam::{Exam, ExamClock, NewSection, Now, Phase, SectionStatus, create, latest},
   tests::{attempts, mixed_database, refusal, words},
   *,
 };
@@ -465,5 +465,38 @@ fn a_failed_final_save_undoes_everything_and_can_be_repeated() {
     assert!(t.answer(&q3, Label::A, 200.0).is_err());
     t.conn.execute_batch("DROP TRIGGER fail;").unwrap();
     assert_eq!(t.save(201.0).session.status, Status::Completed);
+  }
+}
+
+#[test]
+fn the_latest_completed_exam_can_always_be_found() {
+  for kind in BOTH {
+    let mut t = setup(kind);
+    let now = t.time.at(0.0);
+    assert_eq!(latest(&t.conn, now).unwrap(), None);
+    let finish_all = |t: &mut Setup| {
+      t.start(0.0);
+      t.end(0, 1.0);
+      t.start(61.0);
+      t.end(1, 62.0);
+      t.start(63.0);
+    };
+    finish_all(&mut t);
+    assert_eq!(latest(&t.conn, now).unwrap(), None, "not while in progress");
+    // The last section runs out as the app closes, so no screen saw it end.
+    t.clock.leave_any(&mut t.conn, t.time.at(500.0)).unwrap();
+    assert_eq!(t.clock.unfinished(&mut t.conn, t.time.at(501.0)).unwrap(), None);
+    let found = latest(&t.conn, t.time.at(501.0)).unwrap().unwrap();
+    assert_eq!((found.phase, found.session.id.as_str()), (Phase::Ended, t.id.as_str()));
+    assert!(found.session.questions.iter().all(|question| question.is_scored.is_some()));
+
+    // An abandoned exam does not replace it, but a newer completed one does.
+    let abandoned = create(&mut t.conn, kind, "x", &sections()).unwrap();
+    abandon(&mut t.conn, &abandoned).unwrap();
+    assert_eq!(latest(&t.conn, now).unwrap().unwrap().session.id, t.id);
+    t.id = create(&mut t.conn, kind, "y", &sections()).unwrap();
+    finish_all(&mut t);
+    t.end(2, 64.0);
+    assert_eq!(latest(&t.conn, now).unwrap().unwrap().session.id, t.id);
   }
 }

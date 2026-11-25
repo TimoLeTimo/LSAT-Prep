@@ -83,10 +83,10 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 ## Milestone 6 — Practice tests
 - [x] Exam formats as data, exam assembly, and the section engine.
 - [ ] Custom section tests. (Built; real-window check remains.)
-- [ ] Full exam configuration.
+- [ ] Full exam configuration. (Built; real-window check remains.)
 - [ ] Section timers. (Built; real-window check remains.)
 - [ ] Flagging and navigation. (Built; real-window check remains.)
-- [ ] Break handling.
+- [ ] Break handling. (Built; real-window check remains.)
 - [ ] Results screen.
 - [ ] Post-test review.
 - [ ] Verify current LSAC structure before release.

@@ -55,6 +55,7 @@ fn configure<R: Runtime>(builder: Builder<R>) -> Builder<R> {
       commands::leave_exam,
       commands::start_exam_section,
       commands::end_exam_section,
+      commands::latest_exam,
     ])
 }
 

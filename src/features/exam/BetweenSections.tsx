@@ -27,6 +27,7 @@ export function BetweenSections({ exam, onChange }: BetweenSectionsProps) {
   if (phase.name !== 'ready' && phase.name !== 'break') return null
   const position = phase.name === 'ready' ? phase.position : phase.next_position
   const next = sections[position]
+  const keepsRunning = session.config.exam?.kind === 'full_simulation'
 
   async function start() {
     if (isStarting) return
@@ -64,7 +65,13 @@ export function BetweenSections({ exam, onChange }: BetweenSectionsProps) {
       <p className="text-muted">
         The timer starts when you start the section. You can move freely within it, but you cannot
         return to it afterward.
+        {keepsRunning && ' Once started, it keeps running if you leave or close the app.'}
       </p>
+      {phase.name === 'break' && !phase.can_skip && (
+        <p className="text-muted">
+          This break cannot be skipped. When it ends, start the next section yourself.
+        </p>
+      )}
       <StartError message={error} />
       {(phase.name === 'ready' || phase.can_skip) && (
         <Button onClick={start} disabled={isStarting}>

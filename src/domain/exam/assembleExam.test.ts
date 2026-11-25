@@ -158,3 +158,72 @@ describe('pickPassages', () => {
     expect(seen.size).toBe(6)
   })
 })
+
+describe('preferring new questions', () => {
+  const used = (questions: QuestionSummary[], isUsed: (question: QuestionSummary, index: number) => boolean) =>
+    questions.map((question, index) => (isUsed(question, index) ? { ...question, last_correct: true } : question))
+  const usedIds = (questions: QuestionSummary[]) =>
+    new Set(questions.filter(({ last_correct }) => last_correct !== null).map(({ id }) => id))
+
+  it('uses only new ones when there are enough', () => {
+    const questions = [
+      ...used(lrBank(160), (_, index) => index < 80),
+      ...used(rcBank([...mixedLengths, ...mixedLengths]), ({ passage_id }) => Number(passage_id!.slice(1)) < 16),
+    ]
+    const old = usedIds(questions)
+    for (let run = 0; run < 30; run++) {
+      for (const format of examFormats) {
+        const ids = built(questions, format).flatMap(({ question_ids }) => question_ids)
+        expect(ids.filter((id) => old.has(id))).toEqual([])
+      }
+    }
+  })
+
+  it('uses every new LR question before repeating any', () => {
+    const questions = [...used(lrBank(110), (_, index) => index >= 30), ...rcBank(mixedLengths)]
+    const old = usedIds(questions)
+    for (let run = 0; run < 30; run++) {
+      const ids = built(questions, three).flatMap(({ question_ids }) => question_ids)
+      expect(ids.filter((id) => id.startsWith('lr') && !old.has(id))).toHaveLength(30)
+    }
+  })
+
+  it('counts a passage as used if any of it was submitted', () => {
+    const lengths = [7, 7, 7, 6, 7, 7, 7, 6]
+    const questions = [...lrBank(75), ...used(rcBank(lengths), ({ id }) => /^p[0-3]-0$/.test(id))]
+    for (let run = 0; run < 30; run++) {
+      const rc = built(questions, { ...four, sections: four.sections.slice(0, 3) })
+        .filter(({ section }) => section === 'reading_comprehension')
+        .flatMap(({ question_ids }) => question_ids)
+      expect(rc.every((id) => /^p[4-7]/.test(id))).toBe(true)
+    }
+  })
+
+  it('does not put the repeats where they would reveal the unscored section', () => {
+    // Enough new LR for two of three LR sections.
+    const questions = [...used(lrBank(75), (_, index) => index >= 50), ...rcBank([7, 7, 7, 6])]
+    const old = usedIds(questions)
+    let inUnscored = 0
+    const runs = 200
+    for (let run = 0; run < runs; run++) {
+      const unscored = built(questions, four).find(({ unscored_ids }) => unscored_ids.length > 0)!
+      inUnscored += unscored.question_ids.filter((id) => old.has(id)).length
+    }
+    // A third of the 25 repeats, on average.
+    expect(inUnscored / runs).toBeGreaterThan(7.3)
+    expect(inUnscored / runs).toBeLessThan(9.3)
+  })
+
+  it('reaches past the newest passages when their lengths do not fit', () => {
+    const lengths = [5, 5, 5, 5, 8, 8, 8, 7]
+    const questions = [...lrBank(75), ...used(rcBank(lengths), ({ passage_id }) => Number(passage_id!.slice(1)) >= 4)]
+    expect(assembleExam(questions, { ...four, sections: four.sections.slice(0, 3) }).ok).toBe(true)
+  })
+
+  it('is quick with a large bank, even when nothing fits', () => {
+    const started = performance.now()
+    const exam = assembleExam([...lrBank(3500), ...rcBank(Array.from({ length: 300 }, () => 5))], four)
+    expect(exam.ok).toBe(false)
+    expect(performance.now() - started).toBeLessThan(3000)
+  })
+})

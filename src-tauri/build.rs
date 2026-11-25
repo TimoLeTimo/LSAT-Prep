@@ -37,6 +37,7 @@ fn main() {
     "leave_exam",
     "start_exam_section",
     "end_exam_section",
+    "latest_exam",
   ]);
   tauri_build::try_build(tauri_build::Attributes::new().app_manifest(commands))
     .expect("failed to prepare the Tauri build");

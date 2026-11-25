@@ -39,6 +39,10 @@ published there, so the app shows raw scores only.
 - **Users may move freely within a section and cannot return to an earlier one.** The pages above do
   not state this.
 
+## Choosing questions
+A simulation prefers questions that were never submitted. They are chosen for the exam as a whole and
+then distributed at random, so repeats do not reveal which section is unscored.
+
 ## Custom tests
 Tests built from chosen sections use the same engine. Their clock pauses when the user leaves, and
 breaks can be skipped. A full simulation's clock keeps running, and breaks cannot be skipped.

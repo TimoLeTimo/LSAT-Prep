@@ -30,6 +30,8 @@ export const examApi = {
   create: (kind: ExamKind, name: string, sections: ExamSection[]) =>
     invoke<Exam>('create_exam', { kind, name, sections }),
   unfinished: () => invoke<Exam | null>('unfinished_exam'),
+  /** The most recently completed exam. */
+  latest: () => invoke<Exam | null>('latest_exam'),
   /** Resumes the clock of a paused test. */
   open: (sessionId: string) => invoke<Exam>('open_exam', { sessionId }),
   save: (sessionId: string) => invoke<Exam>('save_exam', { sessionId }),

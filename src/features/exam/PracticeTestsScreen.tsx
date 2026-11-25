@@ -7,10 +7,13 @@ import { PageHeading } from '../../components/PageHeading'
 import { errorMessage } from '../../data/errorMessage'
 import { examApi, type Exam } from '../../data/exam'
 import { getQuestionIndex, type QuestionIndex } from '../../data/questionBank'
+import { EmptyBank } from '../practice/EmptyBank'
 import { BetweenSections } from './BetweenSections'
 import { ExamResults } from './ExamResults'
 import { ExamSectionScreen } from './ExamSectionScreen'
+import { LatestExam } from './LatestExam'
 import { ResumeExam } from './ResumeExam'
+import { SimulationSetup } from './SimulationSetup'
 import { TestBuilder } from './TestBuilder'
 
 export function PracticeTestsScreen() {
@@ -39,11 +42,15 @@ type View =
 function Tests() {
   const [view, setView] = useState<View>({ name: 'loading' })
   const [index, setIndex] = useState<QuestionIndex | null>(null)
+  const [latest, setLatest] = useState<Exam | null>(null)
 
   const load = useCallback(() => {
-    Promise.all([getQuestionIndex(), examApi.unfinished()]).then(
-      ([found, exam]) => {
+    // In this order: checking for an unfinished exam can be what completes it.
+    const exams = examApi.unfinished().then(async (exam) => ({ exam, last: await examApi.latest() }))
+    Promise.all([getQuestionIndex(), exams]).then(
+      ([found, { exam, last }]) => {
         setIndex(found)
+        setLatest(last)
         if (exam === null) setView({ name: 'setup' })
         // Time may have run out while the app was closed.
         else if (exam.phase.name === 'ended') setView({ name: 'exam', exam })
@@ -90,5 +97,15 @@ function Tests() {
   const refreshIndex = () => {
     getQuestionIndex().then(setIndex, () => {})
   }
-  return <TestBuilder index={index} onCreated={show} onStale={refreshIndex} />
+  if (index.questions.length === 0 && latest === null) {
+    return <EmptyBank message="There are no questions yet." />
+  }
+  const setup = { index, onCreated: show, onStale: refreshIndex }
+  return (
+    <div className="space-y-8">
+      {latest !== null && <LatestExam exam={latest} onView={() => show(latest)} />}
+      <SimulationSetup {...setup} />
+      <TestBuilder {...setup} />
+    </div>
+  )
 }

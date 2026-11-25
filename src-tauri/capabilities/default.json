@@ -41,6 +41,7 @@
     "allow-save-exam",
     "allow-leave-exam",
     "allow-start-exam-section",
-    "allow-end-exam-section"
+    "allow-end-exam-section",
+    "allow-latest-exam"
   ]
 }

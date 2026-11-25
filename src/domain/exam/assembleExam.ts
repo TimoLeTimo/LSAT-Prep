@@ -28,31 +28,31 @@ export type AssembledExam =
   | { ok: false; shortfall: Shortfall }
 
 const LR: Section = 'logical_reasoning'
-const ATTEMPTS = 40
+const ATTEMPTS = 8
 
 interface Pool {
   lr: string[]
   passages: string[][]
 }
 
-/** Builds an exam at random, never using a question or passage twice. */
+/**
+ * Builds an exam at random, never using a question or passage twice. Questions never
+ * submitted are preferred, for the exam as a whole rather than section by section, so that
+ * which sections have repeats says nothing about which are unscored.
+ */
 export function assembleExam(
   questions: readonly QuestionSummary[],
   format: Pick<ExamFormat, 'sections' | 'shuffleSections' | 'breaksAfter'>,
   random: () => number = Math.random,
 ): AssembledExam {
-  const pool: Pool = {
-    lr: questions.filter(({ section }) => section === LR).map(({ id }) => id),
-    passages: findPassageSets(questions, anyQuestion).map(({ questionIds }) => questionIds),
-  }
+  const pool = newFirst(questions, random)
   const options = kindChoices(format.sections)
   const possible = options.filter((kinds) => hasEnough(pool, needs(format.sections, kinds)))
   if (possible.length === 0) return { ok: false, shortfall: shortfall(pool, format, options, false) }
 
-  // A random choice of passages can leave too few for a later section, so try again.
-  for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
-    const kinds = pickRandom(possible, 1, random)[0]
-    const sections = fill(pool, format.sections, kinds, random)
+  const kinds = pickRandom(possible, 1, random)[0]
+  for (const choice of [kinds, ...possible.filter((other) => other !== kinds)]) {
+    const sections = fillFromNewest(pool, format.sections, choice, random)
     if (sections === null) continue
     const ordered = format.shuffleSections ? pickRandom(sections, sections.length, random) : sections
     return {
@@ -64,6 +64,46 @@ export function assembleExam(
     }
   }
   return { ok: false, shortfall: shortfall(pool, format, possible, true) }
+}
+
+/** In random order, with those never submitted first. A passage is new if all of it is. */
+function newFirst(questions: readonly QuestionSummary[], random: () => number): Pool {
+  const isNew = new Set(
+    questions.filter(({ last_correct }) => last_correct === null).map(({ id }) => id),
+  )
+  const order = <T>(items: T[], isFresh: (item: T) => boolean) => {
+    const shuffled = pickRandom(items, items.length, random)
+    return [...shuffled.filter(isFresh), ...shuffled.filter((item) => !isFresh(item))]
+  }
+  const lr = questions.filter(({ section }) => section === LR).map(({ id }) => id)
+  const passages = findPassageSets(questions, anyQuestion).map(({ questionIds }) => questionIds)
+  return {
+    lr: order(lr, (id) => isNew.has(id)),
+    passages: order(passages, (ids) => ids.every((id) => isNew.has(id))),
+  }
+}
+
+/** Uses as few passages beyond the newest as will fit the required numbers of questions. */
+function fillFromNewest(
+  pool: Pool,
+  specs: readonly SectionSpec[],
+  kinds: Section[],
+  random: () => number,
+) {
+  const need = needs(specs, kinds)
+  const lr = pool.lr.slice(0, need.lr)
+  let size = need.passages
+  for (;;) {
+    // A random choice of passages can leave too few for a later section, so try again.
+    for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+      const passages = pool.passages.slice(0, size)
+      const sections = fill({ lr, passages }, specs, kinds, random)
+      if (sections !== null) return sections
+    }
+    if (size >= pool.passages.length) return null
+    // One at a time at first, then faster, so a large bank stays quick.
+    size = Math.min(pool.passages.length, Math.max(size + 1, Math.floor(size * 1.2)))
+  }
 }
 
 /** Every way to settle the sections that can be either kind. */

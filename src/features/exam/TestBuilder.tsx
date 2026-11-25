@@ -7,7 +7,6 @@ import type { QuestionIndex } from '../../data/questionBank'
 import { sectionNames } from '../../domain/content/names'
 import type { Section } from '../../domain/content/types'
 import { assembleTest, findTestPool, testNeeds, type TestSection } from '../../domain/exam/assembleTest'
-import { EmptyBank } from '../practice/EmptyBank'
 import { Check, Group, NumberField, StartError } from '../practice/fields'
 import { wholeNumber } from '../practice/wholeNumber'
 
@@ -38,8 +37,6 @@ export function TestBuilder({ index, onCreated, onStale }: TestBuilderProps) {
   const [drafts, setDrafts] = useState<Draft[]>(() => [newDraft(0, pool.lr.length > 0)])
   const [error, setError] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
-
-  if (index.questions.length === 0) return <EmptyBank message="There are no questions yet." />
 
   function newDraft(key: number, isLr: boolean): Draft {
     return {

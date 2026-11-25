@@ -38,7 +38,7 @@ export function ResumeExam({ exam, onResume, onEnded }: ResumeExamProps) {
       className="rounded-2xl border border-line bg-surface p-8 shadow-card"
     >
       <h2 id="resume-exam" className="font-serif text-2xl font-semibold">
-        Unfinished Test
+        {keepsRunning ? 'Unfinished Simulation' : 'Unfinished Test'}
       </h2>
       <p className="mt-3">
         {session.config.exam?.name}: {done} of {sections.length} sections finished, created{' '}
@@ -52,7 +52,8 @@ export function ResumeExam({ exam, onResume, onEnded }: ResumeExamProps) {
       )}
       {isConfirming && (
         <p className="mt-3" role="status">
-          End this test? None of its answers will be submitted or scored.
+          End this {keepsRunning ? 'simulation' : 'test'}? None of its answers will be submitted or
+          scored.
         </p>
       )}
       <div className="mt-4">

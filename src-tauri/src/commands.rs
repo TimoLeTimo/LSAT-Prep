@@ -288,6 +288,11 @@ pub fn unfinished_exam(
 }
 
 #[tauri::command(async)]
+pub fn latest_exam(database: State<Database>) -> Result<Option<Exam>, String> {
+  exam::latest(&*database.get()?, Now::get()).map_err(text)
+}
+
+#[tauri::command(async)]
 pub fn open_exam(
   session_id: String,
   exam: State<ExamTimer>,
@@ -712,6 +717,7 @@ mod tests {
     assert_eq!(questions[0]["outcome"]["is_correct"], true);
     assert_eq!((&questions[0]["is_scored"], &questions[1]["is_scored"]), (&json!(true), &json!(false)));
     assert_eq!(call("unfinished_exam", json!({})), Ok(Value::Null));
+    assert_eq!(call("latest_exam", json!({})), Ok(done));
   }
 
   #[test]

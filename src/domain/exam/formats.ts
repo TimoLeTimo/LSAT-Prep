@@ -22,6 +22,10 @@ export interface ExamFormat {
   name: string
   /** When this format is used, for the user's information. */
   period: string
+  /** The first day this format is used, as YYYY-MM-DD. */
+  startsOn: string
+  /** Plain description of the sections and breaks. */
+  summary: readonly string[]
   sections: readonly SectionSpec[]
   /** Whether the sections are put in random order. */
   shuffleSections: boolean
@@ -48,6 +52,13 @@ export const examFormats: readonly ExamFormat[] = [
     id: 'four-section',
     name: 'Four sections, one unscored',
     period: 'August 2024 through June 2027',
+    startsOn: '2024-08-01',
+    summary: [
+      'Four 35-minute sections in random order',
+      'Two Logical Reasoning and one Reading Comprehension section are scored',
+      'One more section of either kind is unscored, and is not identified until the results',
+      'A 10-minute break after the second section',
+    ],
     sections: [
       { kinds: [LR], minutes: 35, scored: { [LR]: lr(25) }, unscored: null },
       { kinds: [LR], minutes: 35, scored: { [LR]: lr(25) }, unscored: null },
@@ -66,6 +77,13 @@ export const examFormats: readonly ExamFormat[] = [
     id: 'three-section',
     name: 'Three sections, unscored questions included',
     period: 'From August 2027',
+    startsOn: '2027-08-01',
+    summary: [
+      'Reading Comprehension, 52 minutes',
+      'Two Logical Reasoning sections, 45 minutes each',
+      'Each section includes unscored questions, which are not identified until the results',
+      'A 10-minute break after the first and second sections',
+    ],
     sections: [
       {
         kinds: [RC],
@@ -80,3 +98,10 @@ export const examFormats: readonly ExamFormat[] = [
     breaksAfter: { 0: 10, 1: 10 },
   },
 ]
+
+/** The newest format already in use on a date, in the user's own time zone. */
+export function defaultFormat(today: Date): ExamFormat {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  const date = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
+  return examFormats.filter(({ startsOn }) => startsOn <= date).at(-1) ?? examFormats[0]
+}

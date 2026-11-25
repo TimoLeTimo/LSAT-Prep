@@ -197,6 +197,21 @@ fn unfinished_id(conn: &Connection) -> rusqlite::Result<Option<String>> {
     .optional()
 }
 
+/// The most recently completed exam, so its results can be found even if the exam ended
+/// while the user was away.
+pub fn latest(conn: &Connection, now: Now) -> Result<Option<Exam>> {
+  let id: Option<String> = conn
+    .query_row(
+      "SELECT id FROM practice_sessions WHERE status = 'completed'
+         AND session_type IN ('test', 'full_simulation')
+       ORDER BY completed_at DESC, rowid DESC LIMIT 1",
+      [],
+      |row| row.get(0),
+    )
+    .optional()?;
+  id.map(|id| view(conn, &id, now)).transpose()
+}
+
 // ---------------------------------------------------------------- State
 
 struct Row {
