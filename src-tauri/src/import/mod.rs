@@ -3,10 +3,10 @@
 
 mod catalog;
 mod history;
-mod package;
+pub mod package;
 mod plan;
 mod session;
-mod store;
+pub mod store;
 #[cfg(test)]
 mod tests;
 

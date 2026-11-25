@@ -15,6 +15,16 @@
     "allow-reject-package",
     "allow-preview-package",
     "allow-cancel-import",
-    "allow-confirm-import"
+    "allow-confirm-import",
+    "allow-unfinished-session",
+    "allow-practice-session",
+    "allow-create-session",
+    "allow-select-answer",
+    "allow-flag-question",
+    "allow-add-question-time",
+    "allow-set-session-position",
+    "allow-submit-answer",
+    "allow-finish-session",
+    "allow-abandon-session"
   ]
 }

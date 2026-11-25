@@ -10,7 +10,8 @@ use tauri_plugin_dialog::DialogExt;
 use crate::{
   bank::{self, QuestionIndex},
   db::DbError,
-  import::{self, Catalog, Entry, Plan, Session},
+  import::{self, Catalog, Entry, Plan, Session, package::{Label, Section}},
+  practice::{self, Config},
 };
 
 /// The open database, or the reason it could not be opened.
@@ -121,6 +122,83 @@ pub fn confirm_import(
   lock(&current.0)?.confirm(&mut *database.get()?).map_err(text)
 }
 
+// ---------------------------------------------------------------- Practice
+
+#[tauri::command(async)]
+pub fn unfinished_session(
+  section: Section,
+  database: State<Database>,
+) -> Result<Option<practice::Session>, String> {
+  practice::unfinished(&*database.get()?, section).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn practice_session(
+  session_id: String,
+  database: State<Database>,
+) -> Result<practice::Session, String> {
+  practice::load(&*database.get()?, &session_id).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn create_session(
+  config: Config,
+  question_ids: Vec<String>,
+  database: State<Database>,
+) -> Result<practice::Session, String> {
+  practice::create(&mut *database.get()?, &config, &question_ids).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn select_answer(
+  id: String,
+  choice: Option<Label>,
+  database: State<Database>,
+) -> Result<(), String> {
+  practice::select(&mut *database.get()?, &id, choice).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn flag_question(id: String, flagged: bool, database: State<Database>) -> Result<(), String> {
+  practice::set_flag(&mut *database.get()?, &id, flagged).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn add_question_time(
+  id: String,
+  seconds: i64,
+  database: State<Database>,
+) -> Result<(), String> {
+  practice::add_time(&mut *database.get()?, &id, seconds).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn set_session_position(
+  session_id: String,
+  position: i64,
+  database: State<Database>,
+) -> Result<(), String> {
+  practice::set_position(&mut *database.get()?, &session_id, position).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn submit_answer(id: String, database: State<Database>) -> Result<practice::Session, String> {
+  practice::submit(&mut *database.get()?, &id).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn finish_session(
+  session_id: String,
+  database: State<Database>,
+) -> Result<practice::Session, String> {
+  practice::finish(&mut *database.get()?, &session_id).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn abandon_session(session_id: String, database: State<Database>) -> Result<(), String> {
+  practice::abandon(&mut *database.get()?, &session_id).map_err(text)
+}
+
 #[cfg(test)]
 mod tests {
   use serde_json::{Value, json};
@@ -199,6 +277,51 @@ mod tests {
     assert!(call(&window, "confirm_import", json!({})).is_err());
     assert_eq!(call(&window, "cancel_import", json!({})), Ok(Value::Null));
     assert!(call(&window, "reject_package", json!({ "summary": "x" })).is_err());
+  }
+
+  #[test]
+  fn the_interface_can_complete_a_practice_session() {
+    let dir = TempDir::new();
+    let mut conn = db::open(&dir.0).unwrap();
+    let path = dir.0.join("package.json");
+    std::fs::write(&path, VALID).unwrap();
+    let mut import = Session::default();
+    import.choose(&conn, &path).unwrap();
+    import.preview(&mut conn).unwrap();
+    import.confirm(&mut conn).unwrap();
+    let app = app(Ok(conn));
+    let window = window(&app);
+    let call = |command: &str, body: Value| call(&window, command, body);
+    let section = json!({ "section": "logical_reasoning" });
+
+    assert_eq!(call("unfinished_session", section.clone()), Ok(Value::Null));
+    let config = json!({
+      "section": "logical_reasoning", "category_ids": [], "difficulties": [2],
+      "question_count": 1, "explanations": "after_each"
+    });
+    let body = json!({ "config": config, "questionIds": ["test-lr-1"] });
+    let session = call("create_session", body).unwrap();
+    let (id, question) = (&session["id"], &session["questions"][0]["id"]);
+    assert_eq!(session["questions"][0]["outcome"], Value::Null);
+
+    assert!(call("select_answer", json!({ "id": question, "choice": "F" })).is_err());
+    for (command, body) in [
+      ("select_answer", json!({ "id": question, "choice": "C" })),
+      ("flag_question", json!({ "id": question, "flagged": true })),
+      ("add_question_time", json!({ "id": question, "seconds": 5 })),
+      ("set_session_position", json!({ "sessionId": id, "position": 0 })),
+    ] {
+      assert_eq!(call(command, body), Ok(Value::Null), "{command}");
+    }
+    let resumed = call("unfinished_session", section.clone()).unwrap();
+    assert_eq!(resumed["questions"][0]["selected"], "C");
+    let checked = call("submit_answer", json!({ "id": question })).unwrap();
+    assert_eq!(checked["questions"][0]["outcome"]["is_correct"], true);
+    let done = call("finish_session", json!({ "sessionId": id })).unwrap();
+    assert_eq!(call("practice_session", json!({ "sessionId": id })), Ok(done));
+    assert_eq!(call("unfinished_session", section), Ok(Value::Null));
+    let ended = call("abandon_session", json!({ "sessionId": id }));
+    assert_eq!(ended, Err(json!("This practice session has ended.")));
   }
 
   #[test]

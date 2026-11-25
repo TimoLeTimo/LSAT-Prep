@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-add-question-time"
+description = "Enables the add_question_time command without any pre-configured scope."
+commands.allow = ["add_question_time"]
+
+[[permission]]
+identifier = "deny-add-question-time"
+description = "Denies the add_question_time command without any pre-configured scope."
+commands.deny = ["add_question_time"]

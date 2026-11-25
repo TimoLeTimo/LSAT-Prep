@@ -47,6 +47,8 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [ ] Review, approve, and import the seed question set.
 
 ## Milestone 3 — Logical Reasoning
+- [x] Session engine: start, save, recover, submit, finish, and end early (no screens yet).
+- [x] Random question selection without repeats.
 - [ ] Question display.
 - [ ] Answer selection.
 - [ ] Next/previous navigation.

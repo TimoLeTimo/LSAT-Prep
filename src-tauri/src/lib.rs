@@ -2,6 +2,7 @@ mod bank;
 mod commands;
 mod db;
 mod import;
+mod practice;
 
 use std::sync::Mutex;
 
@@ -25,6 +26,16 @@ fn configure<R: Runtime>(builder: Builder<R>) -> Builder<R> {
       commands::preview_package,
       commands::cancel_import,
       commands::confirm_import,
+      commands::unfinished_session,
+      commands::practice_session,
+      commands::create_session,
+      commands::select_answer,
+      commands::flag_question,
+      commands::add_question_time,
+      commands::set_session_position,
+      commands::submit_answer,
+      commands::finish_session,
+      commands::abandon_session,
     ])
 }
 

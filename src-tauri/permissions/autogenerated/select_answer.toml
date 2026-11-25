@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-select-answer"
+description = "Enables the select_answer command without any pre-configured scope."
+commands.allow = ["select_answer"]
+
+[[permission]]
+identifier = "deny-select-answer"
+description = "Denies the select_answer command without any pre-configured scope."
+commands.deny = ["select_answer"]

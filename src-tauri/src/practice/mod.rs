@@ -1,0 +1,362 @@
+//! Practice sessions. Every change is saved before the call returns, so closing the app
+//! or a crash loses nothing that was confirmed.
+
+mod model;
+#[cfg(test)]
+mod tests;
+
+use std::{collections::BTreeSet, fmt};
+
+use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
+
+use crate::{
+  db::DbError,
+  import::{
+    package::{Label, Section},
+    store,
+  },
+};
+pub use model::*;
+
+#[derive(Debug)]
+pub enum PracticeError {
+  /// Not allowed right now. Holds a plain-language reason.
+  Refused(&'static str),
+  Failed(DbError),
+}
+
+/// Messages are shown to the user.
+impl fmt::Display for PracticeError {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      PracticeError::Refused(reason) => f.write_str(reason),
+      PracticeError::Failed(error) => write!(f, "Your work could not be saved. {error}"),
+    }
+  }
+}
+
+impl From<rusqlite::Error> for PracticeError {
+  fn from(error: rusqlite::Error) -> Self {
+    PracticeError::Failed(error.into())
+  }
+}
+
+type Result<T> = std::result::Result<T, PracticeError>;
+
+const NOT_FOUND: PracticeError = PracticeError::Refused("This practice session was not found.");
+const ENDED: PracticeError = PracticeError::Refused("This practice session has ended.");
+const LOCKED: PracticeError =
+  PracticeError::Refused("This answer was already submitted, so it cannot be changed.");
+
+const MAX_QUESTIONS: usize = 500;
+/// Longer gaps mean the computer slept or the app was left open.
+const MAX_SECONDS_PER_SAVE: i64 = 600;
+
+/// Takes the write lock first. Dropping the transaction without committing undoes it.
+fn begin(conn: &mut Connection) -> rusqlite::Result<Transaction<'_>> {
+  conn.transaction_with_behavior(TransactionBehavior::Immediate)
+}
+
+fn now(conn: &Connection) -> rusqlite::Result<String> {
+  conn.query_row("SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now')", [], |row| row.get(0))
+}
+
+fn new_id(conn: &Connection) -> rusqlite::Result<String> {
+  conn.query_row("SELECT lower(hex(randomblob(16)))", [], |row| row.get(0))
+}
+
+fn choice_id(question_id: &str, label: Label) -> String {
+  format!("{question_id}:{}", label.as_str())
+}
+
+// ---------------------------------------------------------------- Starting and resuming
+
+/// Starts a session with these questions, in this order.
+pub fn create(conn: &mut Connection, config: &Config, question_ids: &[String]) -> Result<Session> {
+  if question_ids.is_empty() || question_ids.len() > MAX_QUESTIONS {
+    return Err(PracticeError::Refused("Choose between 1 and 500 questions."));
+  }
+  if question_ids.len() != config.question_count {
+    return Err(PracticeError::Refused("The number of questions does not match the session."));
+  }
+  if question_ids.iter().collect::<BTreeSet<_>>().len() != question_ids.len() {
+    return Err(PracticeError::Refused("A question cannot appear twice in a session."));
+  }
+
+  let tx = begin(conn)?;
+  if unfinished_id(&tx, config.section)?.is_some() {
+    return Err(PracticeError::Refused("Finish or end your current session first."));
+  }
+  let id = new_id(&tx)?;
+  let time = now(&tx)?;
+  tx.execute(
+    "INSERT INTO practice_sessions (id, session_type, configuration_json, status, started_at,
+       created_at) VALUES (?1, 'targeted', ?2, 'in_progress', ?3, ?3)",
+    params![id, to_json(config)?, time],
+  )?;
+  for (position, question_id) in question_ids.iter().enumerate() {
+    let snapshot = take_snapshot(&tx, config, question_id)?;
+    tx.prepare_cached(
+      "INSERT INTO session_questions (id, session_id, question_id, display_order,
+         content_snapshot_json) VALUES (?1, ?2, ?3, ?4, ?5)",
+    )?
+    .execute(params![new_id(&tx)?, id, question_id, position as i64, to_json(&snapshot)?])?;
+  }
+  let session = load(&tx, &id)?;
+  tx.commit()?;
+  Ok(session)
+}
+
+/// A full copy of the question, if it can be practiced and fits the session.
+fn take_snapshot(conn: &Connection, config: &Config, id: &str) -> Result<Snapshot> {
+  const UNAVAILABLE: PracticeError =
+    PracticeError::Refused("A chosen question is no longer available. Start again.");
+  let available: Option<String> = conn
+    .prepare_cached(
+      "SELECT c.name FROM questions q
+       JOIN question_categories c ON c.id = q.category_id
+       LEFT JOIN passages p ON p.id = q.passage_id
+       WHERE q.id = ?1 AND q.status = 'approved' AND c.active = 1
+         AND (q.passage_id IS NULL OR p.status = 'approved')",
+    )?
+    .query_row([id], |row| row.get(0))
+    .optional()?;
+  let category_name = available.ok_or(UNAVAILABLE)?;
+  let question = store::load_question(conn, id)?.ok_or(UNAVAILABLE)?;
+  if !config.accepts(&question) {
+    return Err(PracticeError::Refused("A chosen question does not fit this session."));
+  }
+  let passage = match &question.passage_id {
+    Some(passage_id) => Some(store::load_passage(conn, passage_id)?.ok_or(UNAVAILABLE)?),
+    None => None,
+  };
+  Ok(Snapshot { snapshot_version: 1, category_name, question, passage })
+}
+
+fn unfinished_id(conn: &Connection, section: Section) -> rusqlite::Result<Option<String>> {
+  conn
+    .query_row(
+      "SELECT id FROM practice_sessions
+       WHERE status = 'in_progress' AND session_type = 'targeted'
+         AND configuration_json ->> 'section' = ?1
+       ORDER BY created_at DESC LIMIT 1",
+      [section.as_str()],
+      |row| row.get(0),
+    )
+    .optional()
+}
+
+/// The session to resume, if there is one.
+pub fn unfinished(conn: &Connection, section: Section) -> Result<Option<Session>> {
+  unfinished_id(conn, section)?.map(|id| load(conn, &id)).transpose()
+}
+
+/// Answers and explanations are included only for questions whose result may be shown.
+pub fn load(conn: &Connection, id: &str) -> Result<Session> {
+  let (config, status, current_position, created_at, completed_at) = conn
+    .query_row(
+      "SELECT configuration_json, status, current_position, created_at, completed_at
+       FROM practice_sessions WHERE id = ?1",
+      [id],
+      |row| Ok((from_json(row, 0)?, from_text(row, 1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+    )
+    .optional()?
+    .ok_or(NOT_FOUND)?;
+  let questions = conn
+    .prepare_cached(
+      "SELECT s.id, s.content_snapshot_json, s.selected_choice_id, s.is_flagged,
+         s.time_spent_seconds, a.is_correct
+       FROM session_questions s LEFT JOIN attempts a ON a.session_question_id = s.id
+       WHERE s.session_id = ?1 ORDER BY s.display_order",
+    )?
+    .query_map([id], |row| {
+      let snapshot: Snapshot = from_json(row, 1)?;
+      let selected: Option<String> = row.get(2)?;
+      Ok(SessionQuestion::new(
+        row.get(0)?,
+        snapshot,
+        selected,
+        row.get(3)?,
+        row.get(4)?,
+        row.get(5)?,
+        status,
+      ))
+    })?
+    .collect::<rusqlite::Result<_>>()?;
+  Ok(Session { id: id.into(), config, status, current_position, created_at, completed_at, questions })
+}
+
+// ---------------------------------------------------------------- Changing a session
+
+struct Stored {
+  session_id: String,
+  question_id: String,
+  config: Config,
+  selected: Option<String>,
+  submitted: bool,
+}
+
+/// Finds a question in a session that is still in progress.
+fn active_question(conn: &Connection, id: &str) -> Result<Stored> {
+  let (stored, status): (Stored, Status) = conn
+    .query_row(
+      "SELECT s.session_id, s.question_id, p.configuration_json, s.selected_choice_id,
+         EXISTS (SELECT 1 FROM attempts a WHERE a.session_question_id = s.id), p.status
+       FROM session_questions s JOIN practice_sessions p ON p.id = s.session_id WHERE s.id = ?1",
+      [id],
+      |row| {
+        let stored = Stored {
+          session_id: row.get(0)?,
+          question_id: row.get(1)?,
+          config: from_json(row, 2)?,
+          selected: row.get(3)?,
+          submitted: row.get(4)?,
+        };
+        Ok((stored, from_text(row, 5)?))
+      },
+    )
+    .optional()?
+    .ok_or(NOT_FOUND)?;
+  if status == Status::InProgress { Ok(stored) } else { Err(ENDED) }
+}
+
+fn require_active(conn: &Connection, session_id: &str) -> Result<()> {
+  let status: Status = conn
+    .query_row("SELECT status FROM practice_sessions WHERE id = ?1", [session_id], |row| {
+      from_text(row, 0)
+    })
+    .optional()?
+    .ok_or(NOT_FOUND)?;
+  if status == Status::InProgress { Ok(()) } else { Err(ENDED) }
+}
+
+/// Saves a selection, or clears it. Not an attempt until it is submitted.
+pub fn select(conn: &mut Connection, id: &str, choice: Option<Label>) -> Result<()> {
+  let tx = begin(conn)?;
+  let question = active_question(&tx, id)?;
+  if question.submitted {
+    return Err(LOCKED);
+  }
+  let selected = choice.map(|label| choice_id(&question.question_id, label));
+  let time = now(&tx)?;
+  tx.execute(
+    "UPDATE session_questions SET selected_choice_id = ?2,
+       answered_at = CASE WHEN ?2 IS NULL THEN NULL ELSE ?3 END WHERE id = ?1",
+    params![id, selected, time],
+  )?;
+  Ok(tx.commit()?)
+}
+
+pub fn set_flag(conn: &mut Connection, id: &str, flagged: bool) -> Result<()> {
+  let tx = begin(conn)?;
+  active_question(&tx, id)?;
+  tx.execute("UPDATE session_questions SET is_flagged = ?2 WHERE id = ?1", params![id, flagged])?;
+  Ok(tx.commit()?)
+}
+
+/// Adds time spent on a question that has not been submitted.
+pub fn add_time(conn: &mut Connection, id: &str, seconds: i64) -> Result<()> {
+  if !(0..=MAX_SECONDS_PER_SAVE).contains(&seconds) {
+    return Err(PracticeError::Refused("This amount of time is not valid."));
+  }
+  let tx = begin(conn)?;
+  if active_question(&tx, id)?.submitted {
+    return Err(LOCKED);
+  }
+  tx.execute(
+    "UPDATE session_questions SET time_spent_seconds = time_spent_seconds + ?2 WHERE id = ?1",
+    params![id, seconds],
+  )?;
+  Ok(tx.commit()?)
+}
+
+pub fn set_position(conn: &mut Connection, session_id: &str, position: i64) -> Result<()> {
+  let tx = begin(conn)?;
+  require_active(&tx, session_id)?;
+  let changed = tx.execute(
+    "UPDATE practice_sessions SET current_position = ?2 WHERE id = ?1 AND EXISTS
+       (SELECT 1 FROM session_questions WHERE session_id = ?1 AND display_order = ?2)",
+    params![session_id, position],
+  )?;
+  if changed == 0 {
+    return Err(PracticeError::Refused("This question is not in the session."));
+  }
+  Ok(tx.commit()?)
+}
+
+/// Check Answer: submits one answer and locks it. Repeating it changes nothing.
+pub fn submit(conn: &mut Connection, id: &str) -> Result<Session> {
+  let tx = begin(conn)?;
+  let question = active_question(&tx, id)?;
+  if question.config.explanations != Explanations::AfterEach {
+    return Err(PracticeError::Refused("Answers in this session are submitted when you finish."));
+  }
+  if !question.submitted {
+    if question.selected.is_none() {
+      return Err(PracticeError::Refused("Choose an answer first."));
+    }
+    record_attempt(&tx, id)?;
+  }
+  let session = load(&tx, &question.session_id)?;
+  tx.commit()?;
+  Ok(session)
+}
+
+/// Ends the session and submits every selected answer. Unanswered questions get no attempt.
+pub fn finish(conn: &mut Connection, session_id: &str) -> Result<Session> {
+  let tx = begin(conn)?;
+  require_active(&tx, session_id)?;
+  let waiting = tx
+    .prepare(
+      "SELECT id FROM session_questions s WHERE session_id = ?1 AND selected_choice_id IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.session_question_id = s.id)",
+    )?
+    .query_map([session_id], |row| row.get(0))?
+    .collect::<rusqlite::Result<Vec<String>>>()?;
+  for id in waiting {
+    record_attempt(&tx, &id)?;
+  }
+  end(&tx, session_id, "completed")?;
+  let session = load(&tx, session_id)?;
+  tx.commit()?;
+  Ok(session)
+}
+
+/// Ends the session without submitting anything more. Submitted answers are kept.
+pub fn abandon(conn: &mut Connection, session_id: &str) -> Result<()> {
+  let tx = begin(conn)?;
+  require_active(&tx, session_id)?;
+  end(&tx, session_id, "abandoned")?;
+  Ok(tx.commit()?)
+}
+
+fn end(conn: &Connection, session_id: &str, status: &str) -> rusqlite::Result<()> {
+  conn.execute(
+    "UPDATE practice_sessions SET status = ?2,
+       completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
+    [session_id, status],
+  )?;
+  Ok(())
+}
+
+/// Marks the answer against the saved copy, which is what the user saw.
+fn record_attempt(conn: &Connection, id: &str) -> Result<()> {
+  let snapshot: Snapshot = conn.query_row(
+    "SELECT content_snapshot_json FROM session_questions WHERE id = ?1",
+    [id],
+    |row| from_json(row, 0),
+  )?;
+  conn.execute(
+    "INSERT INTO attempts (id, session_question_id, session_id, question_id, selected_choice_id,
+       is_correct, time_spent_seconds, attempted_at, attempt_kind)
+     SELECT ?2, id, session_id, question_id, selected_choice_id, selected_choice_id = ?3,
+       time_spent_seconds, ?4, 'original' FROM session_questions WHERE id = ?1",
+    params![
+      id,
+      new_id(conn)?,
+      choice_id(&snapshot.question.id, snapshot.question.correct_choice),
+      now(conn)?
+    ],
+  )?;
+  Ok(())
+}

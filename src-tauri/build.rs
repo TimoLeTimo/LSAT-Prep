@@ -11,6 +11,16 @@ fn main() {
     "preview_package",
     "cancel_import",
     "confirm_import",
+    "unfinished_session",
+    "practice_session",
+    "create_session",
+    "select_answer",
+    "flag_question",
+    "add_question_time",
+    "set_session_position",
+    "submit_answer",
+    "finish_session",
+    "abandon_session",
   ]);
   tauri_build::try_build(tauri_build::Attributes::new().app_manifest(commands))
     .expect("failed to prepare the Tauri build");

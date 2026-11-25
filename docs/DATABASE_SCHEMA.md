@@ -11,6 +11,13 @@ The exact tables are in `src-tauri/migrations/`; those files are authoritative. 
 - Passage texts are in `passage_texts`, tags in `question_tags`, and provenance and review data in JSON columns. Content rows name the package they came from.
 - Each session question stores a full copy of the question and passage as shown. The copy cannot be changed.
 - One attempt is recorded when a question is submitted, and it cannot be changed. Before that, changing a selection only updates the saved session.
+- Practice session rules are in `src-tauri/src/practice/`:
+  - Answers, flags, time, and position are saved to disk before each call returns.
+  - With explanations after each question, checking an answer submits and locks it. With explanations at the end, answers can change until the session is finished.
+  - Finishing submits every selected answer. Unanswered questions get no attempt.
+  - Ending early (`abandoned`) submits nothing more and keeps answers already submitted.
+  - Answers are marked against the saved copy. The interface receives the key and explanations only after an answer is submitted or the session is finished.
+  - One targeted session per section can be unfinished at a time.
 - Content with history or bookmarks cannot be deleted. Retire it instead.
 - Section timer fields will be added by a later migration when timed practice is built.
 

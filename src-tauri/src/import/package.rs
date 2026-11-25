@@ -30,7 +30,7 @@ enum Format {
   V1,
 }
 
-#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Section {
   LogicalReasoning,
@@ -46,7 +46,7 @@ impl Section {
   }
 }
 
-#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Label {
   A,
   B,
@@ -61,7 +61,7 @@ impl Label {
   }
 }
 
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Category {
   pub id: String,
@@ -110,7 +110,7 @@ pub struct Quality {
   reviewer_notes: String,
 }
 
-#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PassageType {
   Single,
@@ -126,14 +126,14 @@ impl PassageType {
   }
 }
 
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct LabeledText {
   pub label: Label,
   pub text: String,
 }
 
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Passage {
   pub id: String,
@@ -145,7 +145,7 @@ pub struct Passage {
   pub provenance: Provenance,
 }
 
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(deny_unknown_fields, rename_all = "UPPERCASE")]
 pub struct Explanations {
   pub a: String,
@@ -161,7 +161,7 @@ impl Explanations {
   }
 }
 
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Question {
   pub id: String,
