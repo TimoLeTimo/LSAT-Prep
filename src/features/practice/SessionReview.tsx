@@ -15,6 +15,9 @@ interface SessionReviewProps {
   controller: SessionController
   state: SessionState
   position: number
+  /** The positions that Previous and Next step through, in order. */
+  positions: readonly number[]
+  title: string
   scrollPositions: Map<string, number>
   onGoTo: (position: number) => void
   onBack: () => void
@@ -22,10 +25,12 @@ interface SessionReviewProps {
 
 /** One question from a finished session. Nothing here changes the recorded answers. */
 export function SessionReview(props: SessionReviewProps) {
-  const { controller, state, position, scrollPositions, onGoTo, onBack } = props
+  const { controller, state, position, positions, title, scrollPositions, onGoTo, onBack } = props
   const { questions } = state.session
   const question = questions[position]
-  const last = questions.length - 1
+  const step = positions.indexOf(position)
+  const previous: number | undefined = positions[step - 1]
+  const next: number | undefined = step === -1 ? undefined : positions[step + 1]
   const heading = useRef<HTMLHeadingElement>(null)
 
   const screen = useRef<HTMLDivElement>(null)
@@ -35,14 +40,14 @@ export function SessionReview(props: SessionReviewProps) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
-      if (event.key === 'ArrowRight' && position < last) onGoTo(position + 1)
-      else if (event.key === 'ArrowLeft' && position > 0) onGoTo(position - 1)
+      if (event.key === 'ArrowRight' && next !== undefined) onGoTo(next)
+      else if (event.key === 'ArrowLeft' && previous !== undefined) onGoTo(previous)
       else return
       event.preventDefault()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [position, last, onGoTo])
+  }, [previous, next, onGoTo])
 
   return (
     <QuestionLayout
@@ -54,7 +59,7 @@ export function SessionReview(props: SessionReviewProps) {
     >
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
         <h2 ref={heading} tabIndex={-1} className="font-serif text-2xl font-semibold outline-none">
-          Review: Question {position + 1} of {questions.length}
+          {title}
         </h2>
         <ToggleButton
           isOn={question.is_bookmarked}
@@ -66,6 +71,7 @@ export function SessionReview(props: SessionReviewProps) {
       <p className="mt-1 text-sm text-muted">{question.category_name}</p>
       <p className="mt-3 font-medium">
         {resultText(question)}
+        {question.is_scored === false && <span className="font-normal text-muted"> · Unscored</span>}
         <span className="font-normal text-muted">
           {' '}
           · Time: {formatTime(question.time_spent_seconds * 1000)}
@@ -76,10 +82,10 @@ export function SessionReview(props: SessionReviewProps) {
       <ChoiceList question={question} isDisabled onSelect={() => {}} />
       <ExplanationList question={question} />
       <div className="mt-6 flex flex-wrap gap-3 border-t border-line pt-6">
-        <Button variant="secondary" onClick={() => onGoTo(position - 1)} disabled={position === 0}>
+        <Button variant="secondary" onClick={() => previous !== undefined && onGoTo(previous)} disabled={previous === undefined}>
           Previous
         </Button>
-        <Button variant="secondary" onClick={() => onGoTo(position + 1)} disabled={position === last}>
+        <Button variant="secondary" onClick={() => next !== undefined && onGoTo(next)} disabled={next === undefined}>
           Next
         </Button>
         <span className="grow" />

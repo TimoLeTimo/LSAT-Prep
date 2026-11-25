@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../components/Button'
 import { count } from '../../components/count'
-import type { SessionQuestion } from '../../data/practiceSession'
 import { groupByPassage } from './groupByPassage'
-import { resultText } from './resultText'
+import { ResultRow } from './ResultRow'
 import { SaveError } from './SaveError'
 import { score } from './score'
 import type { SessionController, SessionState } from './SessionController'
@@ -24,6 +23,8 @@ export function SessionResults({ controller, state, onDone }: SessionResultsProp
         controller={controller}
         state={state}
         position={reviewing}
+        positions={state.session.questions.map((_, index) => index)}
+        title={`Review: Question ${reviewing + 1} of ${state.session.questions.length}`}
         scrollPositions={scrollPositions}
         onGoTo={setReviewing}
         onBack={() => setReviewing(null)}
@@ -97,27 +98,5 @@ function Summary({ controller, state, onReview, onDone }: SummaryProps) {
         <Button onClick={onDone}>Done</Button>
       </div>
     </div>
-  )
-}
-
-interface ResultRowProps {
-  question: SessionQuestion
-  number: number
-  onClick: () => void
-}
-
-function ResultRow({ question, number, onClick }: ResultRowProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full cursor-pointer flex-wrap justify-between gap-x-6 px-6 py-3 text-left -outline-offset-2 hover:bg-blush"
-    >
-      <span>
-        Question {number} <span className="text-muted">– {question.category_name}</span>
-        {question.is_bookmarked && <span className="text-rose-deep"> · Bookmarked</span>}
-      </span>
-      <span className="font-medium">{resultText(question)}</span>
-    </button>
   )
 }

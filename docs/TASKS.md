@@ -87,8 +87,8 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [ ] Section timers. (Built; real-window check remains.)
 - [ ] Flagging and navigation. (Built; real-window check remains.)
 - [ ] Break handling. (Built; real-window check remains.)
-- [ ] Results screen.
-- [ ] Post-test review.
+- [ ] Results screen. (Built; real-window check remains.)
+- [ ] Post-test review. (Built; real-window check remains.)
 - [ ] Verify current LSAC structure before release.
 
 ## Milestone 7 — Review and statistics
