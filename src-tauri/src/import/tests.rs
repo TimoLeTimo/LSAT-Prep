@@ -87,7 +87,7 @@ fn dump(conn: &Connection, tables: &[&str]) -> Vec<String> {
 }
 
 fn statuses(conn: &Connection) -> Vec<String> {
-  history(conn).unwrap().into_iter().map(|entry| entry.status).collect()
+  list_history(conn).unwrap().into_iter().map(|entry| entry.status).collect()
 }
 
 fn reasons(result: Result<Plan, ImportError>) -> String {
@@ -130,7 +130,7 @@ fn stores_exactly_what_the_file_contains() {
   for category in &package.categories {
     assert_eq!(store::load_category(&conn, &category.id).unwrap().as_ref(), Some(category));
   }
-  let entry = &history(&conn).unwrap()[0];
+  let entry = &list_history(&conn).unwrap()[0];
   assert_eq!(entry.status, "succeeded");
   assert_eq!((entry.questions_added, entry.passages_added, entry.categories_added), (2, 1, 1));
 }
@@ -144,7 +144,7 @@ fn skips_identical_items_and_adds_new_ones() {
   assert_eq!(plan.questions.skipped, ["test-rc-1"]);
   assert_eq!(plan.passages.skipped, ["test-passage-1"]);
   assert_eq!(plan.categories.skipped, ["test-category"]);
-  let entry = &history(&conn).unwrap()[0];
+  let entry = &list_history(&conn).unwrap()[0];
   assert_eq!((entry.questions_added, entry.duplicates_skipped), (1, 3));
 }
 
@@ -444,8 +444,8 @@ fn text_that_looks_like_sql_is_stored_as_text() {
 fn records_rejected_files_with_a_limited_summary() {
   let dir = TempDir::new();
   let conn = open(&dir);
-  record_rejection(&conn, &"é".repeat(5000)).unwrap();
-  let entry = &history(&conn).unwrap()[0];
+  history::record_rejection(&conn, &"é".repeat(5000)).unwrap();
+  let entry = &list_history(&conn).unwrap()[0];
   assert_eq!(entry.status, "rejected_validation");
   assert_eq!(entry.summary.chars().count(), 1000);
 }
@@ -464,4 +464,152 @@ fn imports_a_package_at_the_question_limit() {
     }
   });
   assert_eq!(import_now(&mut conn, &bytes).unwrap().questions.new.len(), 2000);
+}
+
+// ---------------------------------------------------------------- Import session
+
+/// A package file on disk and a session that has chosen it.
+fn choose(dir: &TempDir, conn: &Connection, bytes: &[u8]) -> (std::path::PathBuf, Session) {
+  let path = dir.0.join("package.json");
+  std::fs::write(&path, bytes).unwrap();
+  let mut session = Session::default();
+  session.choose(conn, &path).unwrap();
+  (path, session)
+}
+
+#[test]
+fn a_session_imports_the_previewed_file_once() {
+  let dir = TempDir::new();
+  let mut conn = open(&dir);
+  let (_, mut session) = choose(&dir, &conn, VALID.as_bytes());
+  assert_eq!(session.bytes().unwrap(), VALID.as_bytes());
+  session.preview(&mut conn).unwrap();
+  assert_eq!(session.confirm(&mut conn).unwrap().questions.new.len(), 2);
+  reasons(session.confirm(&mut conn));
+  assert_eq!(statuses(&conn), ["succeeded"]);
+}
+
+#[test]
+fn a_session_needs_a_file_and_a_preview() {
+  let dir = TempDir::new();
+  let mut conn = open(&dir);
+  let mut empty = Session::default();
+  assert!(empty.bytes().is_err());
+  reasons(empty.preview(&mut conn));
+  reasons(empty.confirm(&mut conn));
+  assert!(empty.reject(&conn, "no").is_err());
+  let (_, mut session) = choose(&dir, &conn, VALID.as_bytes());
+  assert!(reasons(session.confirm(&mut conn)).contains("Preview"));
+  assert!(statuses(&conn).is_empty());
+}
+
+#[test]
+fn cancelling_imports_and_records_nothing() {
+  let dir = TempDir::new();
+  let mut conn = open(&dir);
+  let (_, mut session) = choose(&dir, &conn, VALID.as_bytes());
+  session.preview(&mut conn).unwrap();
+  session.cancel();
+  reasons(session.confirm(&mut conn));
+  assert!(statuses(&conn).is_empty());
+}
+
+#[test]
+fn a_rejected_file_cannot_be_imported() {
+  let dir = TempDir::new();
+  let mut conn = open(&dir);
+  let (_, mut session) = choose(&dir, &conn, VALID.as_bytes());
+  session.preview(&mut conn).unwrap();
+  session.reject(&conn, "Not valid.").unwrap();
+  reasons(session.confirm(&mut conn));
+  let entries = list_history(&conn).unwrap();
+  assert_eq!((entries.len(), entries[0].summary.as_str()), (1, "Not valid."));
+  assert_eq!(entries[0].display_name, None);
+}
+
+#[test]
+fn a_blocked_preview_is_recorded_and_ends_the_session() {
+  let dir = TempDir::new();
+  let mut conn = database_in_use(&dir);
+  let (_, mut session) = choose(&dir, &conn, VALID.as_bytes());
+  assert!(!session.preview(&mut conn).unwrap().problems.is_empty());
+  reasons(session.confirm(&mut conn));
+  let entry = &list_history(&conn).unwrap()[0];
+  assert_eq!(entry.status, "rejected_validation");
+  assert_eq!(entry.display_name.as_deref(), Some("TEST DATA package"));
+}
+
+#[test]
+fn a_file_the_engine_refuses_is_recorded_without_its_details() {
+  let dir = TempDir::new();
+  let mut conn = open(&dir);
+  let (_, mut session) = choose(&dir, &conn, b"{}");
+  reasons(session.preview(&mut conn));
+  reasons(session.confirm(&mut conn));
+  assert_eq!(statuses(&conn), ["rejected_validation"]);
+  assert_eq!(list_history(&conn).unwrap()[0].display_name, None);
+}
+
+#[test]
+fn confirming_reads_the_file_again() {
+  for change in ["replace", "delete"] {
+    let dir = TempDir::new();
+    let mut conn = open(&dir);
+    let before = dump(&conn, &CONTENT_TABLES);
+    let (path, mut session) = choose(&dir, &conn, VALID.as_bytes());
+    session.preview(&mut conn).unwrap();
+    match change {
+      "replace" => std::fs::write(&path, second_package(|_| ())).unwrap(),
+      _ => std::fs::remove_file(&path).unwrap(),
+    }
+    assert!(matches!(session.confirm(&mut conn), Err(ImportError::Changed)), "{change}");
+    assert_eq!(dump(&conn, &CONTENT_TABLES), before);
+  }
+}
+
+#[test]
+fn a_new_choice_replaces_the_old_one_even_if_it_fails() {
+  let dir = TempDir::new();
+  let mut conn = open(&dir);
+  let (_, mut session) = choose(&dir, &conn, VALID.as_bytes());
+  session.preview(&mut conn).unwrap();
+  assert!(session.choose(&conn, &dir.0.join("missing.json")).is_err());
+  reasons(session.confirm(&mut conn));
+}
+
+#[test]
+fn refuses_folders_missing_files_and_large_files() {
+  let dir = TempDir::new();
+  let conn = open(&dir);
+  let large = dir.0.join("large.json");
+  std::fs::File::create(&large).unwrap().set_len(20 * 1024 * 1024 + 1).unwrap();
+  let mut session = Session::default();
+  for (path, expected) in [
+    (dir.0.clone(), "not a folder"),
+    (dir.0.join("missing.json"), "could not be read"),
+    (large, "20 MB"),
+  ] {
+    let error = session.choose(&conn, &path).unwrap_err().to_string();
+    assert!(error.contains(expected), "{error}");
+  }
+  assert_eq!(statuses(&conn), ["rejected_validation"; 3]);
+}
+
+#[test]
+fn the_original_error_survives_when_history_cannot_be_recorded() {
+  let dir = TempDir::new();
+  let mut conn = open(&dir);
+  let before = dump(&conn, &CONTENT_TABLES);
+  let plan = preview(&mut conn, VALID.as_bytes()).unwrap();
+  conn
+    .execute_batch(
+      "CREATE TEMP TRIGGER a BEFORE INSERT ON main.questions BEGIN SELECT RAISE(ABORT, 'original'); END;
+       CREATE TEMP TRIGGER b BEFORE INSERT ON main.content_import_history
+         BEGIN SELECT RAISE(ABORT, 'history'); END;",
+    )
+    .unwrap();
+  let error = import(&mut conn, VALID.as_bytes(), &plan).unwrap_err().to_string();
+  assert!(error.contains("original") && !error.contains("history"), "{error}");
+  assert_eq!(dump(&conn, &CONTENT_TABLES), before);
+  assert!(statuses(&conn).is_empty());
 }

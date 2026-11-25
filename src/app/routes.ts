@@ -6,7 +6,7 @@ export type DestinationId =
   | 'review'
   | 'statistics'
 
-export type Route = 'menu' | 'settings' | DestinationId
+export type Route = 'menu' | 'settings' | 'question-bank' | DestinationId
 
 export interface Destination {
   id: DestinationId
@@ -24,12 +24,14 @@ export const destinations: readonly Destination[] = [
 ]
 
 export function routeHref(route: Route): string {
-  return route === 'menu' ? '#/' : `#/${route}`
+  if (route === 'menu') return '#/'
+  return route === 'question-bank' ? '#/settings/question-bank' : `#/${route}`
 }
 
 /** Turns the address hash into a route. Anything unknown goes to the menu. */
 export function parseRoute(hash: string): Route {
   const name = hash.replace(/^#\/?/, '')
   if (name === 'settings') return 'settings'
+  if (name === 'settings/question-bank') return 'question-bank'
   return destinations.find((destination) => destination.id === name)?.id ?? 'menu'
 }

@@ -1,6 +1,6 @@
 # LSAT Prep
 
-An offline-first LSAT-style practice app for macOS. The visual shell and database are in place; practice features are not built yet.
+An offline-first LSAT-style practice app for macOS. Question import is in place under Settings; practice features are not built yet.
 Product requirements are in [docs/](docs/README.md).
 
 ## Requirements

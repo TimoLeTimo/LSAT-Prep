@@ -1,9 +1,11 @@
 //! Imports question packages. Content is only ever added, in a single transaction.
 //! User activity tables are never written.
 
+mod catalog;
 mod history;
 mod package;
 mod plan;
+mod session;
 mod store;
 #[cfg(test)]
 mod tests;
@@ -14,9 +16,11 @@ use rusqlite::{Connection, TransactionBehavior};
 use sha2::{Digest, Sha256};
 
 use crate::db::DbError;
-pub use history::{list as history, record_rejection};
+pub use catalog::{Catalog, load as load_catalog};
+pub use history::{Entry, list as list_history};
 use package::Package;
 pub use plan::Plan;
+pub use session::Session;
 
 #[derive(Debug)]
 pub enum ImportError {
@@ -57,7 +61,7 @@ fn read(bytes: &[u8]) -> Result<(Package, String), ImportError> {
 }
 
 /// Shows what importing this file would do. Writes nothing.
-pub fn preview(conn: &mut Connection, bytes: &[u8]) -> Result<Plan, ImportError> {
+fn preview(conn: &mut Connection, bytes: &[u8]) -> Result<Plan, ImportError> {
   let (package, hash) = read(bytes)?;
   // A transaction gives one consistent view; it is dropped without saving.
   let tx = conn.transaction()?;
@@ -66,7 +70,7 @@ pub fn preview(conn: &mut Connection, bytes: &[u8]) -> Result<Plan, ImportError>
 
 /// Imports the file if it still does exactly what the confirmed preview said.
 /// Every outcome is recorded in the import history.
-pub fn import(conn: &mut Connection, bytes: &[u8], confirmed: &Plan) -> Result<Plan, ImportError> {
+fn import(conn: &mut Connection, bytes: &[u8], confirmed: &Plan) -> Result<Plan, ImportError> {
   let result = run(conn, bytes, confirmed);
   if let Err(error) = &result {
     // Recorded separately, after the rollback. The original error matters more than a

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-package-bytes"
+description = "Enables the package_bytes command without any pre-configured scope."
+commands.allow = ["package_bytes"]
+
+[[permission]]
+identifier = "deny-package-bytes"
+description = "Denies the package_bytes command without any pre-configured scope."
+commands.deny = ["package_bytes"]

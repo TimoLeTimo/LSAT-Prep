@@ -6,6 +6,14 @@
     "main"
   ],
   "permissions": [
-    "allow-database-status"
+    "allow-database-status",
+    "allow-import-catalog",
+    "allow-import-history",
+    "allow-choose-package",
+    "allow-package-bytes",
+    "allow-reject-package",
+    "allow-preview-package",
+    "allow-cancel-import",
+    "allow-confirm-import"
   ]
 }

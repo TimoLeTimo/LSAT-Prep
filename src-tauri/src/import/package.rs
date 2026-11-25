@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
-const MAX_BYTES: usize = 20 * 1024 * 1024;
+pub const MAX_BYTES: usize = 20 * 1024 * 1024;
 pub const LABELS: [Label; 5] = [Label::A, Label::B, Label::C, Label::D, Label::E];
 
 #[derive(Deserialize, Debug)]

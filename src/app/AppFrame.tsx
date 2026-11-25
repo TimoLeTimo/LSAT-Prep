@@ -36,8 +36,10 @@ export function AppFrame({ route, title, children }: AppFrameProps) {
             href={routeHref('settings')}
             aria-label="Settings"
             title="Settings"
-            aria-current={route === 'settings' ? 'page' : undefined}
-            className="rounded-lg p-2.5 text-muted transition-colors hover:bg-blush hover:text-rose-deep aria-[current=page]:bg-blush aria-[current=page]:text-rose-deep"
+            aria-current={
+              route === 'settings' ? 'page' : route === 'question-bank' ? 'true' : undefined
+            }
+            className="rounded-lg p-2.5 text-muted transition-colors hover:bg-blush hover:text-rose-deep aria-[current]:bg-blush aria-[current]:text-rose-deep"
           >
             <Icon name="settings" className="size-5" />
           </a>

@@ -32,13 +32,13 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [x] Create content package format.
 - [x] Define/version the JSON content-package contract.
 - [x] Implement package parser and side-effect-free validation.
-- [ ] Add Settings → Question Bank Management.
-- [ ] Add Import Questions local file picker.
-- [ ] Build validation feedback and package preview.
+- [x] Add Settings → Question Bank Management.
+- [x] Add Import Questions local file picker.
+- [x] Build validation feedback and package preview.
 - [x] Detect duplicate package versions and content IDs.
-- [ ] Require confirmation; import approved questions only. (Engine rules done; confirmation screen remains.)
+- [x] Require confirmation; import approved questions only.
 - [x] Implement atomic SQLite import transaction and rollback tests.
-- [ ] Add content package registry and import history. (Storage done; history screen remains.)
+- [x] Add content package registry and import history.
 - [x] Verify imports do not change attempts, bookmarks, sessions, or statistics.
 - [ ] Create small original seed question set.
 

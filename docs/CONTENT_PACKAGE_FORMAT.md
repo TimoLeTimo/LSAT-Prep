@@ -109,7 +109,8 @@ the app, so a retired question stays retired. Tag order does not matter. A categ
 description, or order differs counts as different content.
 
 Confirmed imports are always recorded in the import history, whatever the outcome. Files that
-fail validation are recorded without any of their content.
+fail validation are recorded without any of their content. Packages blocked at preview are recorded
+by name. Previews the user cancels are not recorded.
 
 A field that appears twice in one JSON object is refused by the import engine. The TypeScript
 validator cannot detect this, because standard JSON parsing keeps only the last value.
