@@ -3,6 +3,7 @@ import { MainMenu } from './app/MainMenu'
 import { destinations, type Route } from './app/routes'
 import { useRoute } from './app/useRoute'
 import { PlaceholderScreen } from './components/PlaceholderScreen'
+import { LogicalReasoningScreen } from './features/logical-reasoning/LogicalReasoningScreen'
 import { QuestionBankScreen } from './features/question-bank/QuestionBankScreen'
 import { SettingsScreen } from './features/settings/SettingsScreen'
 
@@ -21,7 +22,8 @@ function App() {
       {route === 'menu' && <MainMenu />}
       {route === 'settings' && <SettingsScreen />}
       {route === 'question-bank' && <QuestionBankScreen />}
-      {destination && <PlaceholderScreen key={route} title={title} />}
+      {route === 'logical-reasoning' && <LogicalReasoningScreen />}
+      {destination && route !== 'logical-reasoning' && <PlaceholderScreen key={route} title={title} />}
     </AppFrame>
   )
 }

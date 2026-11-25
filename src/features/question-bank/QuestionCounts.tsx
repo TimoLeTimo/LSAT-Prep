@@ -1,20 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import type { QuestionIndex } from '../../data/questionBank'
+import { difficultyNames, sectionNames } from '../../domain/content/names'
 import { DIFFICULTIES, type Difficulty, type Section } from '../../domain/content/types'
 import { filterQuestions } from '../../domain/practice/filterQuestions'
-import { count } from './count'
-
-const difficultyNames: Record<Difficulty, string> = {
-  1: 'Introductory',
-  2: 'Standard',
-  3: 'Challenging',
-  4: 'Advanced',
-}
-
-const sectionNames: Record<Section, string> = {
-  logical_reasoning: 'Logical Reasoning',
-  reading_comprehension: 'Reading Comprehension',
-}
+import { count } from '../../components/count'
 
 export function QuestionCounts({ index }: { index: QuestionIndex | string | null }) {
   return (

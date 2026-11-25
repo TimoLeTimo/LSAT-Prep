@@ -1,5 +1,5 @@
 import type { ImportHistoryEntry } from '../../data/questionImport'
-import { count } from './count'
+import { count } from '../../components/count'
 
 const statusNames = {
   succeeded: 'Imported',

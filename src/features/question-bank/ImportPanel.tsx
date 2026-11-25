@@ -2,7 +2,7 @@ import { useEffect, useRef, type ReactNode } from 'react'
 import { Button } from '../../components/Button'
 import type { ImportPlan } from '../../data/questionImport'
 import type { Issue } from '../../domain/content/validatePackage'
-import { count } from './count'
+import { count } from '../../components/count'
 import { describePath } from './describePath'
 import { useImport, type ImportState } from './useImport'
 
