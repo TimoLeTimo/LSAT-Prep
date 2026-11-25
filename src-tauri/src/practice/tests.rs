@@ -41,6 +41,7 @@ fn config(explanations: Explanations, question_count: usize) -> Config {
     time_limit_seconds: None,
     custom: None,
     exam: None,
+    review: false,
   }
 }
 
@@ -854,7 +855,7 @@ fn a_passage_survives_recovery_exactly_as_shown() {
 // ---------------------------------------------------------------- Custom sessions
 
 /// TEST DATA ONLY: LR q1-q4 (keys C) and RC z, a, m on p1 and b, c on p2 (keys C).
-pub(super) fn mixed_database(dir: &TempDir) -> Connection {
+pub(crate) fn mixed_database(dir: &TempDir) -> Connection {
   let mut conn = rc_database(dir);
   let mut package: Value =
     serde_json::from_str(include_str!("../../../tests/fixtures/valid-package.json")).unwrap();

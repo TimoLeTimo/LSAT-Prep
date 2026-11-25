@@ -8,7 +8,7 @@ mod model;
 #[cfg(test)]
 mod exam_tests;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use std::{collections::BTreeSet, fmt};
 
@@ -98,7 +98,12 @@ pub fn create(conn: &mut Connection, config: &Config, question_ids: &[String]) -
   }
 
   let tx = begin(conn)?;
-  if unfinished_id(&tx, config.section)?.is_some() {
+  let unfinished = if config.review {
+    unfinished_review_id(&tx)?
+  } else {
+    unfinished_id(&tx, config.section)?
+  };
+  if unfinished.is_some() {
     return Err(PracticeError::Refused("Finish or end your current session first."));
   }
   let id = insert_session(&tx, config)?;
@@ -183,6 +188,9 @@ fn check_fit(conn: &Connection, config: &Config, snapshots: &[Snapshot]) -> Resu
   if rc.iter().any(is_lr) {
     return Err(MISFIT);
   }
+  if config.review {
+    return check_review(conn, config, rc, snapshots);
+  }
   let expected = match (&config.custom, config.section, config.passage_count) {
     (None, Some(Section::LogicalReasoning), None) => (snapshots.len(), 0),
     (None, Some(Section::ReadingComprehension), Some(passages)) => (0, passages),
@@ -198,6 +206,37 @@ fn check_fit(conn: &Connection, config: &Config, snapshots: &[Snapshot]) -> Resu
     }
   }
   check_passage_sets(conn, config, rc, expected.1)
+}
+
+/// Questions that were answered or bookmarked before. Those on one passage stay together.
+fn check_review(
+  conn: &Connection,
+  config: &Config,
+  rc: &[Snapshot],
+  snapshots: &[Snapshot],
+) -> Result<()> {
+  let is_plain = config.section.is_none()
+    && config.custom.is_none()
+    && config.passage_count.is_none()
+    && config.category_ids.is_empty()
+    && config.difficulties.is_empty()
+    && config.explanations == Explanations::AfterEach
+    && config.time_limit_seconds.is_none();
+  if !is_plain {
+    return Err(MISFIT);
+  }
+  let groups = rc.chunk_by(|a, b| a.question.passage_id == b.question.passage_id);
+  let passages: BTreeSet<_> = rc.iter().map(|snapshot| &snapshot.question.passage_id).collect();
+  if groups.count() != passages.len() {
+    return Err(PracticeError::Refused("Questions on one passage must stay together."));
+  }
+  for snapshot in snapshots {
+    let history = history(conn, &snapshot.question.id)?;
+    if history.last_correct.is_none() && !history.is_bookmarked {
+      return Err(MISFIT);
+    }
+  }
+  Ok(())
 }
 
 /// Whether a question matches the filters and, in a custom session, the earlier work.
@@ -295,6 +334,22 @@ fn unfinished_id(conn: &Connection, section: Option<Section>) -> rusqlite::Resul
       |row| row.get(0),
     )
     .optional()
+}
+
+fn unfinished_review_id(conn: &Connection) -> rusqlite::Result<Option<String>> {
+  conn
+    .query_row(
+      "SELECT id FROM practice_sessions WHERE status = 'in_progress' AND session_type = 'review'
+       ORDER BY created_at DESC LIMIT 1",
+      [],
+      |row| row.get(0),
+    )
+    .optional()
+}
+
+/// The review session to resume, if there is one.
+pub fn unfinished_review(conn: &Connection) -> Result<Option<Session>> {
+  unfinished_review_id(conn)?.map(|id| load(conn, &id)).transpose()
 }
 
 /// The session to resume, if there is one. With no section, finds a custom session.
@@ -599,7 +654,12 @@ fn record_attempt(conn: &Connection, id: &str) -> Result<()> {
     "INSERT INTO attempts (id, session_question_id, session_id, question_id, selected_choice_id,
        is_correct, time_spent_seconds, attempted_at, attempt_kind)
      SELECT ?2, id, session_id, question_id, selected_choice_id, selected_choice_id = ?3,
-       time_spent_seconds, ?4, 'original' FROM session_questions WHERE id = ?1",
+       time_spent_seconds, ?4,
+       CASE WHEN EXISTS (SELECT 1 FROM practice_sessions p
+           WHERE p.id = session_id AND p.session_type = 'review')
+         AND EXISTS (SELECT 1 FROM attempts a WHERE a.question_id = session_questions.question_id)
+       THEN 'retry' ELSE 'original' END
+     FROM session_questions WHERE id = ?1",
     params![
       id,
       new_id(conn)?,

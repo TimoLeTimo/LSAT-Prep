@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-unfinished-review"
+description = "Enables the unfinished_review command without any pre-configured scope."
+commands.allow = ["unfinished_review"]
+
+[[permission]]
+identifier = "deny-unfinished-review"
+description = "Denies the unfinished_review command without any pre-configured scope."
+commands.deny = ["unfinished_review"]

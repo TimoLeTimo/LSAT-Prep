@@ -48,6 +48,11 @@
     "allow-back-up-data",
     "allow-choose-backup",
     "allow-cancel-restore",
-    "allow-confirm-restore"
+    "allow-confirm-restore",
+    "allow-statistics-records",
+    "allow-review-items",
+    "allow-question-history",
+    "allow-unfinished-review",
+    "allow-exam-results"
   ]
 }

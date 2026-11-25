@@ -33,6 +33,8 @@ export interface SessionConfig {
   custom: CustomOptions | null
   /** Missing or null for practice. */
   exam?: { kind: ExamKind; name: string } | null
+  /** A session started from Review, to try questions again. */
+  review?: boolean
 }
 
 export interface Outcome {

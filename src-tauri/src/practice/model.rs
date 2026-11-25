@@ -97,6 +97,9 @@ pub struct Config {
   /// Null or missing means practice.
   #[serde(default)]
   pub exam: Option<ExamConfig>,
+  /// A session started from Review, to try questions again.
+  #[serde(default)]
+  pub review: bool,
 }
 
 impl Config {
@@ -112,10 +115,14 @@ impl Config {
       time_limit_seconds: None,
       custom: None,
       exam: Some(exam),
+      review: false,
     }
   }
 
   pub fn session_type(&self) -> &'static str {
+    if self.review {
+      return "review";
+    }
     match (&self.exam, &self.custom) {
       (Some(ExamConfig { kind: ExamKind::Test, .. }), _) => "test",
       (Some(ExamConfig { kind: ExamKind::FullSimulation, .. }), _) => "full_simulation",

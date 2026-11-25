@@ -51,7 +51,8 @@ When ready to begin on Linux, follow `START_HERE_FIRST_SESSION.md`. It contains 
 7. `RULES_OF_ENGAGEMENT_QUESTION_CREATION.md`
 8. `CONTENT_PACKAGE_FORMAT.md`
    and `CONTENT_QA_CHECKLIST.md`
-   and `EXAM_FORMATS.md`, `RELIABILITY.md`, `MAC_BUILD.md`
+   and `EXAM_FORMATS.md`, `RELIABILITY.md`, `MAC_BUILD.md`,
+   and `STATISTICS.md`
 9. `AI_HANDOFF_PROMPT.md`
 
 This documentation describes the intended product. It is not authorization to generate the entire application in one shot. Implement in small, reviewable milestones.

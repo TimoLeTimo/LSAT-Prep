@@ -21,6 +21,7 @@ use crate::{
     self, Clock, Config, ExamKind, Reading,
     exam::{self, Exam, ExamClock, NewSection, Now},
   },
+  stats::{self, PastAnswer, Records, ReviewItem},
   templates::{self, Choices, Template},
 };
 
@@ -417,6 +418,36 @@ pub fn end_exam_section(
 ) -> Result<Exam, String> {
   let mut exam = lock(&exam.0)?;
   exam.end_section(&mut *database.get()?, &session_id, position, Now::get()).map_err(text)
+}
+
+// ---------------------------------------------------------------- Review and statistics
+
+#[tauri::command(async)]
+pub fn statistics_records(database: State<Database>) -> Result<Records, String> {
+  stats::records(&*database.get()?).map_err(db_text)
+}
+
+#[tauri::command(async)]
+pub fn review_items(database: State<Database>) -> Result<Vec<ReviewItem>, String> {
+  stats::review_items(&*database.get()?).map_err(db_text)
+}
+
+#[tauri::command(async)]
+pub fn question_history(
+  question_id: String,
+  database: State<Database>,
+) -> Result<Vec<PastAnswer>, String> {
+  stats::question_history(&*database.get()?, &question_id).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn unfinished_review(database: State<Database>) -> Result<Option<practice::Session>, String> {
+  practice::unfinished_review(&*database.get()?).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn exam_results(session_id: String, database: State<Database>) -> Result<Exam, String> {
+  exam::results(&*database.get()?, &session_id, Now::get()).map_err(text)
 }
 
 // ---------------------------------------------------------------- Backup and restore
@@ -926,6 +957,42 @@ mod tests {
     assert_eq!((&questions[0]["is_scored"], &questions[1]["is_scored"]), (&json!(true), &json!(false)));
     assert_eq!(call("unfinished_exam", json!({})), Ok(Value::Null));
     assert_eq!(call("latest_exam", json!({})), Ok(done));
+  }
+
+  #[test]
+  fn the_interface_can_retry_and_read_records() {
+    let dir = TempDir::new();
+    let mut conn = db::open(&dir.0).unwrap();
+    let path = dir.0.join("package.json");
+    std::fs::write(&path, VALID).unwrap();
+    let mut import = Session::default();
+    import.choose(&conn, &path).unwrap();
+    import.preview(&mut conn).unwrap();
+    import.confirm(&mut conn).unwrap();
+    let app = app(Ok(conn));
+    let window = window(&app);
+    let call = |command: &str, body: Value| call(&window, command, body);
+    call("set_bookmark", json!({ "questionId": "test-lr-1", "bookmarked": true })).unwrap();
+    assert_eq!(call("review_items", json!({})).unwrap()[0]["question_id"], "test-lr-1");
+    let config = json!({
+      "section": null, "category_ids": [], "difficulties": [], "question_count": 1,
+      "explanations": "after_each", "passage_count": null, "time_limit_seconds": null,
+      "custom": null, "review": true
+    });
+    let body = json!({ "config": config, "questionIds": ["test-lr-1"] });
+    for is_retry in [false, true] {
+      let session = call("create_session", body.clone()).unwrap();
+      assert_eq!(call("unfinished_review", json!({})), Ok(session.clone()));
+      let question = &session["questions"][0]["id"];
+      call("select_answer", json!({ "id": question, "choice": "C" })).unwrap();
+      call("submit_answer", json!({ "id": question })).unwrap();
+      call("finish_session", json!({ "sessionId": session["id"] })).unwrap();
+      let records = call("statistics_records", json!({})).unwrap();
+      assert_eq!(records["answers"].as_array().unwrap().last().unwrap()["is_retry"], is_retry);
+      assert!(call("exam_results", json!({ "sessionId": session["id"] })).is_err());
+    }
+    let history = call("question_history", json!({ "questionId": "test-lr-1" })).unwrap();
+    assert_eq!(history.as_array().unwrap().len(), 2);
   }
 
   /// An app whose data is in this folder, opened as it really is.

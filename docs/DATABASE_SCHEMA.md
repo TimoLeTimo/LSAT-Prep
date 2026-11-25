@@ -32,6 +32,7 @@ The exact tables are in `src-tauri/migrations/`; those files are authoritative. 
   - A full simulation's clock uses wall time, so it runs while the app is closed or asleep, and its breaks cannot be skipped. A test's clock pauses when the user leaves.
   - After a break, the next section waits for the user to start it.
   - One exam can be unfinished at a time, separate from practice.
+- Retries are `review` sessions: only questions answered or bookmarked before, checked one at a time, untimed. An answer there is a `retry` if the question was answered before. One can be unfinished at a time. Statistics are defined in `STATISTICS.md`.
 - Templates (`src-tauri/src/templates.rs`) hold choices only, never questions. Names are unique ignoring capitals, up to 60 characters, with at most 50 templates. Each chosen category keeps its section and name, so one that is later unavailable can be explained. A template whose choices cannot be read stays listed and can be renamed or deleted.
 - Content with history or bookmarks cannot be deleted. Retire it instead.
 - The session clock runs in Rust (`practice/clock.rs`) while the practice screen is open, and `active_ms` stores the time it has run.

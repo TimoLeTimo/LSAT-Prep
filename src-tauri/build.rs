@@ -44,6 +44,11 @@ fn main() {
     "choose_backup",
     "cancel_restore",
     "confirm_restore",
+    "statistics_records",
+    "review_items",
+    "question_history",
+    "unfinished_review",
+    "exam_results",
   ]);
   tauri_build::try_build(tauri_build::Attributes::new().app_manifest(commands))
     .expect("failed to prepare the Tauri build");

@@ -92,7 +92,8 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [ ] Verify current LSAC structure before release.
 
 ## Milestone 7 — Review and statistics
-(Postponed by the product owner on November 24, 2026. The Review and Statistics screens are placeholders.)
+(Postponed, then resumed, on November 24, 2026.)
+- [x] Calculations, retry rules, and records (no screens yet). Defined in STATISTICS.md.
 - [ ] Incorrect question review.
 - [ ] Bookmark review.
 - [ ] Retry workflow.

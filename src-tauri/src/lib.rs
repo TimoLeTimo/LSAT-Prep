@@ -3,6 +3,7 @@ mod commands;
 mod db;
 mod import;
 mod practice;
+mod stats;
 mod templates;
 
 use tauri::{Builder, Manager, RunEvent, Runtime};
@@ -60,6 +61,11 @@ fn configure<R: Runtime>(builder: Builder<R>) -> Builder<R> {
       commands::choose_backup,
       commands::cancel_restore,
       commands::confirm_restore,
+      commands::statistics_records,
+      commands::review_items,
+      commands::question_history,
+      commands::unfinished_review,
+      commands::exam_results,
     ])
 }
 

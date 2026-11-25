@@ -212,6 +212,16 @@ pub fn latest(conn: &Connection, now: Now) -> Result<Option<Exam>> {
   id.map(|id| view(conn, &id, now)).transpose()
 }
 
+/// The results of one completed exam.
+pub fn results(conn: &Connection, id: &str, now: Now) -> Result<Exam> {
+  let exam = view(conn, id, now)?;
+  if exam.session.status == Status::Completed {
+    Ok(exam)
+  } else {
+    refused("This exam was not completed.")
+  }
+}
+
 // ---------------------------------------------------------------- State
 
 struct Row {

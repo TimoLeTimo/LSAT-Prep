@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-review-items"
+description = "Enables the review_items command without any pre-configured scope."
+commands.allow = ["review_items"]
+
+[[permission]]
+identifier = "deny-review-items"
+description = "Denies the review_items command without any pre-configured scope."
+commands.deny = ["review_items"]

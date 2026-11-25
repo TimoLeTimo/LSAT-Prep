@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-statistics-records"
+description = "Enables the statistics_records command without any pre-configured scope."
+commands.allow = ["statistics_records"]
+
+[[permission]]
+identifier = "deny-statistics-records"
+description = "Denies the statistics_records command without any pre-configured scope."
+commands.deny = ["statistics_records"]
