@@ -73,7 +73,7 @@ pub fn run() {
     .expect("error while starting LSAT Prep")
     .run(|app, event| {
       if let RunEvent::Exit = event {
-        commands::save_clock_before_exit(app);
+        commands::save_before_exit(app);
       }
     });
 }

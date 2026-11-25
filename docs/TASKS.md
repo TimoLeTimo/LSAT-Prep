@@ -53,45 +53,46 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [x] Question display.
 - [x] Answer selection.
 - [x] Next/previous navigation.
-- [ ] Timer. (Counting and pausing confirmed; running out of time and sleep remain.)
+- [ ] Timer. (Counting, pausing, and running out of time confirmed; sleep remains.)
 - [x] Bookmarking.
-- [ ] Explanations. (Built; real-window check remains.)
+- [x] Explanations.
 - [x] Autosave and session recovery. (Resumed after closing the app; an abrupt quit is untested.)
 
 ## Milestone 4 — Reading Comprehension
 - [x] Choose whole passage sets and start RC sessions.
-- [ ] Passage display. (Built; real-window check remains.)
+- [x] Passage display.
 - [x] Passage-question association.
-- [ ] Comparative passages. (Built; real-window check remains.)
-- [ ] Question navigation. (Built; real-window check remains.)
-- [ ] Autosave and timing. (Built; real-window check remains.)
-- [ ] Review with the passage visible. (Built; real-window check remains.)
+- [x] Comparative passages.
+- [x] Question navigation.
+- [x] Autosave and timing.
+- [x] Review with the passage visible.
 
 ## Milestone 5 — Custom Practice
 - [x] Selection, subset, ordering, and answer-shuffling rules.
-- [ ] Section selection. (Built; real-window check remains.)
-- [ ] Question count. (Built; real-window check remains.)
-- [ ] Difficulty filters. (Built; real-window check remains.)
-- [ ] Category filters. (Built; real-window check remains.)
-- [ ] Timed/untimed/custom time. (Built; real-window check remains.)
-- [ ] Explanation timing. (Built; real-window check remains.)
-- [ ] Question subset filters. (Built; real-window check remains.)
-- [ ] Randomization. (Built; real-window check remains.)
-- [ ] Saved templates. (Built; real-window check remains.)
-- [ ] Availability validation. (Built; real-window check remains.)
+- [x] Section selection.
+- [x] Question count.
+- [x] Difficulty filters.
+- [x] Category filters.
+- [x] Timed/untimed/custom time.
+- [x] Explanation timing.
+- [x] Question subset filters.
+- [x] Randomization.
+- [x] Saved templates.
+- [x] Availability validation.
 
 ## Milestone 6 — Practice tests
 - [x] Exam formats as data, exam assembly, and the section engine.
-- [ ] Custom section tests. (Built; real-window check remains.)
-- [ ] Full exam configuration. (Built; real-window check remains.)
-- [ ] Section timers. (Built; real-window check remains.)
-- [ ] Flagging and navigation. (Built; real-window check remains.)
-- [ ] Break handling. (Built; real-window check remains.)
-- [ ] Results screen. (Built; real-window check remains.)
-- [ ] Post-test review. (Built; real-window check remains.)
+- [x] Custom section tests.
+- [x] Full exam configuration.
+- [x] Section timers.
+- [x] Flagging and navigation.
+- [x] Break handling.
+- [x] Results screen.
+- [x] Post-test review.
 - [ ] Verify current LSAC structure before release.
 
 ## Milestone 7 — Review and statistics
+(Postponed by the product owner on November 24, 2026. The Review and Statistics screens are placeholders.)
 - [ ] Incorrect question review.
 - [ ] Bookmark review.
 - [ ] Retry workflow.
@@ -102,13 +103,13 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [ ] Practice test history.
 
 ## Milestone 8 — Reliability
-- [ ] Offline test.
-- [ ] Restart/recovery test.
-- [ ] Timer suspension test.
+- [x] Offline test.
+- [x] Restart/recovery test.
+- [ ] Timer suspension test. (Needs a real suspend.)
 - [ ] Backup/export.
 - [ ] Restore test.
-- [ ] Migration test.
-- [ ] Keyboard/accessibility check.
+- [x] Migration test.
+- [x] Keyboard/accessibility check. (A screen reader is untested.)
 
 ## Milestone 9 — Mac delivery
 - [ ] App icon and metadata.

@@ -7,7 +7,7 @@ The exact tables are in `src-tauri/migrations/`; those files are authoritative. 
 - Migrations are numbered files that are never edited after release. Missing migrations run in one transaction, so either all succeed or none do.
 - An existing database is backed up and the copy checked before an upgrade. If the backup fails, the upgrade does not start. Backups are in the `backups` folder beside the database and are not deleted automatically.
 - The app refuses a database that is damaged, from a newer version, or from another program, and shows an error instead of resetting it.
-- The app data folder is chosen by the operating system for `com.lsatprep.desktop`. While the app is open, recent changes may be in `lsat-prep.db-wal`, so do not copy `lsat-prep.db` alone.
+- The app data folder is chosen by the operating system for `com.lsatprep.desktop`. While the app is open, or after a crash, recent changes may be in `lsat-prep.db-wal`, so do not copy `lsat-prep.db` alone. A normal close moves them into `lsat-prep.db`.
 - Passage texts are in `passage_texts`, tags in `question_tags`, and provenance and review data in JSON columns. Content rows name the package they came from.
 - Each session question stores a full copy of the question and passage as shown. The copy cannot be changed.
 - One attempt is recorded when a question is submitted, and it cannot be changed. Before that, changing a selection only updates the saved session.

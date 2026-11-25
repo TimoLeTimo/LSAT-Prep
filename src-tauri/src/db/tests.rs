@@ -318,3 +318,23 @@ fn saved_work_survives_without_a_clean_close() {
   assert_eq!(count(&open(&after.0).unwrap(), "attempts"), 1);
   drop(conn);
 }
+
+#[test]
+fn after_a_normal_close_the_database_file_is_complete_by_itself() {
+  let dir = TempDir::new();
+  let conn = database_with_attempt(&dir);
+  let copy_alone = || {
+    let alone = TempDir::new();
+    fs::copy(dir.file(), alone.file()).unwrap();
+    open(&alone.0).map(|conn| count(&conn, "attempts"))
+  };
+  assert_ne!(copy_alone().ok(), Some(1), "the side file is still needed while open");
+  tidy(&conn).unwrap();
+  assert_eq!(copy_alone().unwrap(), 1);
+  // The connection still works afterward.
+  add_question_tag(&conn);
+}
+
+fn add_question_tag(conn: &Connection) {
+  conn.execute("INSERT INTO question_tags VALUES ('q1', 'tag')", []).unwrap();
+}

@@ -12,7 +12,7 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::{
   bank::{self, QuestionIndex},
-  db::DbError,
+  db::{self, DbError},
   import::{self, Catalog, Entry, Plan, Session, package::{Label, Section}},
   practice::{
     self, Clock, Config, ExamKind, Reading,
@@ -392,8 +392,9 @@ fn require_time(
   clock.require_time(&mut conn, &session_id, Instant::now()).map_err(text)
 }
 
-/// A normal close loses no clock time. Failure only loses time since the last save.
-pub fn save_clock_before_exit<R: Runtime>(app: &AppHandle<R>) {
+/// A normal close loses no clock time, and leaves the data in one complete file. Failure
+/// only loses time since the last save.
+pub fn save_before_exit<R: Runtime>(app: &AppHandle<R>) {
   let (clock, database) = (app.state::<SessionClock>(), app.state::<Database>());
   if let (Ok(mut clock), Ok(mut conn)) = (lock(&clock.0), database.get()) {
     let _ = clock.pause_any(&mut conn, Instant::now());
@@ -401,6 +402,7 @@ pub fn save_clock_before_exit<R: Runtime>(app: &AppHandle<R>) {
   let exam = app.state::<ExamTimer>();
   if let (Ok(mut exam), Ok(mut conn)) = (lock(&exam.0), database.get()) {
     let _ = exam.leave_any(&mut conn, Now::get());
+    let _ = db::tidy(&conn);
   }
 }
 
@@ -419,7 +421,7 @@ mod tests {
   };
 
   use super::*;
-  use crate::db::{self, test_support::TempDir};
+  use crate::db::test_support::TempDir;
 
   const VALID: &str = include_str!("../../tests/fixtures/valid-package.json");
 
@@ -567,7 +569,7 @@ mod tests {
 
     // Closing the app saves a running clock, after which it is paused.
     call("start_clock", id.clone()).unwrap();
-    save_clock_before_exit(app.handle());
+    save_before_exit(app.handle());
     assert!(call("select_answer", answer).unwrap_err().to_string().contains("paused"));
     let done = call("finish_session", id.clone()).unwrap();
     assert_eq!(done["questions"][0]["outcome"]["is_correct"], true);

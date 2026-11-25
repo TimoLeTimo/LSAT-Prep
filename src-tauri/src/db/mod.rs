@@ -44,6 +44,13 @@ fn open_with(dir: &Path, migrations: &[&str]) -> Result<Connection, DbError> {
   Ok(conn)
 }
 
+/// Moves recent changes from the -wal side file into the database file, so the one file is
+/// complete after a normal close. Nothing is lost if this fails.
+pub fn tidy(conn: &Connection) -> Result<(), DbError> {
+  conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
+  Ok(())
+}
+
 fn check_ownership(conn: &Connection) -> Result<(), DbError> {
   let id: i64 = conn.query_row("PRAGMA application_id", [], |row| row.get(0))?;
   let tables: i64 = conn.query_row("SELECT count(*) FROM sqlite_schema", [], |row| row.get(0))?;
