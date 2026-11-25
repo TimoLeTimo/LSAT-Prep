@@ -65,7 +65,7 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [ ] Comparative passages. (Built; real-window check remains.)
 - [ ] Question navigation. (Built; real-window check remains.)
 - [ ] Autosave and timing. (Built; real-window check remains.)
-- [ ] Review with the passage visible.
+- [ ] Review with the passage visible. (Built; real-window check remains.)
 
 ## Milestone 5 — Custom Practice
 - [ ] Section selection.
