@@ -1,6 +1,6 @@
 import type { DestinationId } from '../app/routes'
 
-type IconName = DestinationId | 'settings' | 'back'
+type IconName = DestinationId | 'settings' | 'back' | 'down'
 
 const paths: Record<IconName, string> = {
   'logical-reasoning': 'M12 4v5M12 9 6 15M12 9l6 6M4 15h4v4H4zM16 15h4v4h-4zM10 2h4v4h-4z',
@@ -11,6 +11,7 @@ const paths: Record<IconName, string> = {
   statistics: 'M4 4v16h16M8 16v-4M13 16V7M18 16v-6',
   settings:
     'M19.0 10.1L21.7 10.5L21.7 13.5L19.0 13.9L18.2 15.6L19.9 17.8L17.8 19.9L15.6 18.2L13.9 19.0L13.5 21.7L10.5 21.7L10.1 19.0L8.4 18.2L6.2 19.9L4.1 17.8L5.8 15.6L5.0 13.9L2.3 13.5L2.3 10.5L5.0 10.1L5.8 8.4L4.1 6.2L6.2 4.1L8.4 5.8L10.1 5.0L10.5 2.3L13.5 2.3L13.9 5.0L15.6 5.8L17.8 4.1L19.9 6.2L18.2 8.4ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
+  down: 'M6 9l6 6 6-6',
   back: 'M19 12H5M11 6l-6 6 6 6',
 }
 

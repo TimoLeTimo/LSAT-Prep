@@ -1,6 +1,6 @@
 # LSAT Prep
 
-An offline-first LSAT-style practice app for macOS. Question import, and Logical Reasoning, Reading Comprehension, custom practice (timed or untimed), and custom section tests and full simulations, and backup and restore, are in place. Review and Statistics are postponed.
+An offline-first LSAT-style practice app for macOS. Question import, and Logical Reasoning, Reading Comprehension, custom practice (timed or untimed), and custom section tests and full simulations, and backup and restore, are in place. Review is in place; Statistics is not built yet.
 Product requirements are in [docs/](docs/README.md).
 
 ## Requirements

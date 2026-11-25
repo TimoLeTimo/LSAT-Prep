@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
+import { SelectField } from '../../components/SelectField'
 import type { QuestionIndex } from '../../data/questionBank'
 import { difficultyNames, sectionNames } from '../../domain/content/names'
 import { DIFFICULTIES, type Difficulty, type Section } from '../../domain/content/types'
@@ -32,7 +33,7 @@ function Filters({ index }: { index: QuestionIndex }) {
   return (
     <div className="mt-4 rounded-2xl border border-line bg-surface p-6 shadow-card">
       <div className="grid gap-4 sm:grid-cols-3">
-        <Select
+        <SelectField
           label="Section"
           value={section}
           onChange={(value) => {
@@ -43,16 +44,16 @@ function Filters({ index }: { index: QuestionIndex }) {
           <option value="">All sections</option>
           <option value="logical_reasoning">{sectionNames.logical_reasoning}</option>
           <option value="reading_comprehension">{sectionNames.reading_comprehension}</option>
-        </Select>
-        <Select label="Category" value={category} onChange={setCategory}>
+        </SelectField>
+        <SelectField label="Category" value={category} onChange={setCategory}>
           <option value="">All categories</option>
           {categories.map((item) => (
             <option key={item.id} value={item.id}>
               {section === '' ? `${sectionNames[item.section]}: ${item.name}` : item.name}
             </option>
           ))}
-        </Select>
-        <Select
+        </SelectField>
+        <SelectField
           label="Difficulty"
           value={String(difficulty)}
           onChange={(value) => setDifficulty(Number(value) as Difficulty | 0)}
@@ -63,33 +64,11 @@ function Filters({ index }: { index: QuestionIndex }) {
               {level} – {difficultyNames[level]}
             </option>
           ))}
-        </Select>
+        </SelectField>
       </div>
       <p className="mt-5 text-lg font-medium" role="status">
         {count(found.length, 'question')}
       </p>
     </div>
-  )
-}
-
-interface SelectProps {
-  label: string
-  value: string
-  onChange: (value: string) => void
-  children: ReactNode
-}
-
-function Select({ label, value, onChange, children }: SelectProps) {
-  return (
-    <label className="block min-w-0">
-      <span className="text-sm text-muted">{label}</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-1 block w-full rounded-lg border border-line bg-surface px-3 py-2"
-      >
-        {children}
-      </select>
-    </label>
   )
 }

@@ -12,6 +12,7 @@ repeating on macOS.
 | Normal close | Closed mid-session | Clock saved; the database file is complete by itself |
 | Timed practice | Closed, killed, and let time run out | Paused while closed; saved answers submitted |
 | Simulation | Killed and closed mid-section, mid-break, and in the last section | Timer kept running; correct phase on return; results available |
+| Review | Lists compared with the database; retried, killed mid-retry, resumed; past answers; retired question; 100 bookmarks | Matched; original answers unchanged; no accessibility problems found |
 | Suspend | Moved the wall and boot clocks ahead 10 to 60 minutes under the real app, leaving the steady clock alone | Practice and tests lost no time; a simulation counted it |
 | Release build | Optimized build: opened offline, imported, practiced, 10 hard kills | Nothing lost |
 | Marking | Compared 13 attempts with the keys in the database | All correct |

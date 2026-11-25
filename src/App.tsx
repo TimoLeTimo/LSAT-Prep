@@ -8,6 +8,7 @@ import { BackupScreen } from './features/backup/BackupScreen'
 import { PracticeTestsScreen } from './features/exam/PracticeTestsScreen'
 import { PracticeScreen } from './features/practice/PracticeScreen'
 import { QuestionBankScreen } from './features/question-bank/QuestionBankScreen'
+import { ReviewScreen } from './features/review/ReviewScreen'
 import { SettingsScreen } from './features/settings/SettingsScreen'
 
 const otherTitles: Partial<Record<Route, string>> = {
@@ -36,7 +37,8 @@ function App() {
       {route === 'backup' && <BackupScreen />}
       {practiceSection !== undefined && <PracticeScreen key={route} section={practiceSection} />}
       {route === 'practice-tests' && <PracticeTestsScreen />}
-      {destination && practiceSection === undefined && route !== 'practice-tests' && <PlaceholderScreen key={route} title={title} />}
+      {route === 'review' && <ReviewScreen />}
+      {route === 'statistics' && <PlaceholderScreen title={title} />}
     </AppFrame>
   )
 }

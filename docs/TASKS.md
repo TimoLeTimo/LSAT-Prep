@@ -94,9 +94,9 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 ## Milestone 7 — Review and statistics
 (Postponed, then resumed, on November 24, 2026.)
 - [x] Calculations, retry rules, and records (no screens yet). Defined in STATISTICS.md.
-- [ ] Incorrect question review.
-- [ ] Bookmark review.
-- [ ] Retry workflow.
+- [x] Incorrect question review.
+- [x] Bookmark review.
+- [x] Retry workflow.
 - [ ] Summary statistics.
 - [ ] LR/RC comparison.
 - [ ] Category/difficulty breakdown.
