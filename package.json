@@ -1,7 +1,7 @@
 {
   "name": "lsat-prep",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,7 +11,9 @@
     "tauri": "tauri",
     "app": "env -u GTK_PATH -u GIO_MODULE_DIR tauri dev",
     "test": "vitest run",
-    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib"
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
+    "build:mac": "RUSTFLAGS=\"--remap-path-prefix=$HOME=/build\" tauri build --bundles app,dmg",
+    "build:linux": "RUSTFLAGS=\"--remap-path-prefix=$HOME=/build\" tauri build --bundles deb"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.5",

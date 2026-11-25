@@ -5,6 +5,8 @@ import { defineConfig } from 'vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // Safari on the oldest supported macOS; see minimumSystemVersion in tauri.conf.json.
+  build: { target: 'safari16.4' },
   clearScreen: false, // keep Rust errors visible during `tauri dev`
   server: {
     // Must match devUrl in src-tauri/tauri.conf.json, so fail if the port is taken.

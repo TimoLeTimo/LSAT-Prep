@@ -40,6 +40,8 @@ npm test          # run the TypeScript tests
 npm run test:rust # run the Rust tests
 npm run lint      # check the code for common mistakes
 npm run tauri -- build --debug --no-bundle   # desktop test build, no installer
+npm run build:linux # release package for Linux (.deb)
+npm run build:mac   # on a Mac; see docs/MAC_BUILD.md
 npm run preview   # serve the production build locally (run build first)
 ```
 

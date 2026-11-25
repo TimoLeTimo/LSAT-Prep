@@ -23,3 +23,7 @@ tauri-plugin-dialog = "2.8.4"
 
 [dev-dependencies]
 tauri = { version = "2.12.7", features = ["test"] }
+
+[profile.release]
+# Leave out debugging names. The build scripts in package.json remove folder names.
+strip = "symbols"

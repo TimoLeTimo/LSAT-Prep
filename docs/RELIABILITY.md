@@ -12,6 +12,8 @@ repeating on macOS.
 | Normal close | Closed mid-session | Clock saved; the database file is complete by itself |
 | Timed practice | Closed, killed, and let time run out | Paused while closed; saved answers submitted |
 | Simulation | Killed and closed mid-section, mid-break, and in the last section | Timer kept running; correct phase on return; results available |
+| Suspend | Moved the wall and boot clocks ahead 10 to 60 minutes under the real app, leaving the steady clock alone | Practice and tests lost no time; a simulation counted it |
+| Release build | Optimized build: opened offline, imported, practiced, 10 hard kills | Nothing lost |
 | Marking | Compared 13 attempts with the keys in the database | All correct |
 | Shuffled answers | 8 questions, checked by text | Choices, key, explanations, and records agreed |
 | Custom filters | Category, difficulty, both with a passage, missed, new, shuffled order, timed; chosen questions compared with the database | All matched. "Exclude correct" and a bookmarked session were checked only by unit tests |
@@ -30,5 +32,9 @@ repeating on macOS.
 Simulated time: the section start and break end times were moved back in the test database, rather
 than waiting 35 and 10 minutes.
 
-**Not checked:** real suspend, power loss, a full disk, a screen reader, the native
+The suspend check rests on two facts, both confirmed here: the app's timer reads `CLOCK_MONOTONIC`,
+and during a real 19-minute suspend of this computer that clock did not advance. The app was not open
+during that real suspend.
+
+**Not checked:** a real suspend with the app open, power loss, a full disk, a screen reader, the native
 file pickers (opening a file was confirmed by hand; saving was not), and macOS.

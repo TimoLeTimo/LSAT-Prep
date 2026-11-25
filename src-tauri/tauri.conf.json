@@ -35,6 +35,12 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "Education",
+    "shortDescription": "Offline LSAT-style practice",
+    "longDescription": "An independent, unofficial study application for LSAT-style practice that works offline. It is not affiliated with, endorsed by, or sponsored by the Law School Admission Council (LSAC).",
+    "macOS": {
+      "minimumSystemVersion": "13.3"
+    }
   }
 }

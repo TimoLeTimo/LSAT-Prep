@@ -53,7 +53,7 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [x] Question display.
 - [x] Answer selection.
 - [x] Next/previous navigation.
-- [ ] Timer. (Counting, pausing, and running out of time confirmed; sleep remains.)
+- [x] Timer.
 - [x] Bookmarking.
 - [x] Explanations.
 - [x] Autosave and session recovery. (Resumed after closing the app; an abrupt quit is untested.)
@@ -105,16 +105,18 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 ## Milestone 8 — Reliability
 - [x] Offline test.
 - [x] Restart/recovery test.
-- [ ] Timer suspension test. (Needs a real suspend.)
+- [x] Timer suspension test. (The effect of a suspend, simulated in the real app; see RELIABILITY.md.)
 - [x] Backup/export.
 - [x] Restore test.
 - [x] Migration test.
 - [x] Keyboard/accessibility check. (A screen reader is untested.)
 
 ## Milestone 9 — Mac delivery
-- [ ] App icon and metadata.
-- [ ] Build on macOS.
-- [ ] Test on recipient's Mac.
-- [ ] Confirm architecture compatibility.
-- [ ] Sign/notarize if distributing outside App Store.
-- [ ] Verify offline operation after install.
+- [x] App icon and metadata.
+- [x] Release build and package on Linux.
+- [x] Mac build and test instructions (MAC_BUILD.md).
+- [ ] Build on macOS. (Needs a Mac.)
+- [ ] Test on recipient's Mac. (Needs a Mac.)
+- [ ] Confirm architecture compatibility. (Needs a Mac.)
+- [ ] Sign/notarize if distributing outside App Store. (Needs a Mac.)
+- [ ] Verify offline operation after install. (Needs a Mac.)
