@@ -32,6 +32,7 @@ export function testSession(ids = ['a', 'b', 'c']): Session {
       explanations: 'after_each',
       passage_count: null,
       time_limit_seconds: null,
+      custom: null,
     },
     status: 'in_progress',
     current_position: 0,

@@ -7,6 +7,9 @@ export interface QuestionSummary {
   category_id: string
   difficulty: Difficulty
   passage_id: string | null
+  /** The most recent attempt, or null if never submitted. */
+  last_correct: boolean | null
+  is_bookmarked: boolean
 }
 
 /** An empty list, or a missing section, means "any". */

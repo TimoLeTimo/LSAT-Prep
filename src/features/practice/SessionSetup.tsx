@@ -97,6 +97,7 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
         explanations,
         passage_count: isByPassage ? number : null,
         time_limit_seconds: isTimed ? limit * 60 : null,
+        custom: null,
       }
       onStarted(await practiceSession.create(config, ids))
     } catch (reason) {

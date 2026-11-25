@@ -68,6 +68,7 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [ ] Review with the passage visible. (Built; real-window check remains.)
 
 ## Milestone 5 — Custom Practice
+- [x] Selection, subset, ordering, and answer-shuffling rules (no screens yet).
 - [ ] Section selection.
 - [ ] Question count.
 - [ ] Difficulty filters.

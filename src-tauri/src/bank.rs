@@ -10,6 +10,9 @@ pub struct QuestionSummary {
   category_id: String,
   difficulty: i64,
   passage_id: Option<String>,
+  /// The most recent attempt, or null if never submitted.
+  last_correct: Option<bool>,
+  is_bookmarked: bool,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -38,7 +41,10 @@ pub fn index(conn: &Connection) -> rusqlite::Result<QuestionIndex> {
     .collect::<rusqlite::Result<_>>()?;
   let questions = conn
     .prepare(
-      "SELECT q.id, q.section, q.category_id, q.difficulty, q.passage_id
+      "SELECT q.id, q.section, q.category_id, q.difficulty, q.passage_id,
+         (SELECT a.is_correct FROM attempts a WHERE a.question_id = q.id
+          ORDER BY a.attempted_at DESC, a.rowid DESC LIMIT 1),
+         EXISTS (SELECT 1 FROM bookmarks b WHERE b.question_id = q.id)
        FROM questions q
        JOIN question_categories c ON c.id = q.category_id
        LEFT JOIN passages p ON p.id = q.passage_id
@@ -53,6 +59,8 @@ pub fn index(conn: &Connection) -> rusqlite::Result<QuestionIndex> {
         category_id: row.get(2)?,
         difficulty: row.get(3)?,
         passage_id: row.get(4)?,
+        last_correct: row.get(5)?,
+        is_bookmarked: row.get(6)?,
       })
     })?
     .collect::<rusqlite::Result<_>>()?;
@@ -104,8 +112,34 @@ mod tests {
         category_id: "rc-detail".into(),
         difficulty: 2,
         passage_id: Some("test-passage-1".into()),
+        last_correct: None,
+        is_bookmarked: false,
       }
     );
+  }
+
+  #[test]
+  fn includes_the_most_recent_attempt_and_bookmarks() {
+    let dir = TempDir::new();
+    let mut conn = imported(&dir);
+    conn
+      .execute_batch(
+        "INSERT INTO practice_sessions (id, session_type, configuration_json, status, created_at)
+           VALUES ('s', 'targeted', '{}', 'completed', 'now');
+         INSERT INTO session_questions (id, session_id, question_id, display_order, content_snapshot_json)
+           VALUES ('x', 's', 'test-lr-1', 0, '{}'), ('y', 's', 'test-lr-1', 1, '{}');
+         INSERT INTO attempts VALUES ('2', 'y', 's', 'test-lr-1', 'test-lr-1:A', 0, 1, '2026-02-01', 'original');
+         INSERT INTO attempts VALUES ('1', 'x', 's', 'test-lr-1', 'test-lr-1:C', 1, 1, '2026-01-01', 'original');",
+      )
+      .unwrap();
+    crate::practice::set_bookmark(&mut conn, "test-rc-1", true).unwrap();
+    let found: Vec<_> = index(&conn)
+      .unwrap()
+      .questions
+      .into_iter()
+      .map(|question| (question.last_correct, question.is_bookmarked))
+      .collect();
+    assert_eq!(found, [(Some(false), false), (None, true)]);
   }
 
   #[test]

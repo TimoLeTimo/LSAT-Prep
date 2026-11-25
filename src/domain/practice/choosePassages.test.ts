@@ -8,12 +8,14 @@ const rc = (id: string, passage_id: string, category_id: string, difficulty: 1 |
   category_id,
   difficulty,
   passage_id,
+  last_correct: null,
+  is_bookmarked: false,
 })
 
 // IDs are out of order on purpose: the list order is what counts.
 const questions: QuestionSummary[] = [
   rc('z', 'p1', 'rc-detail', 1),
-  { id: 'lr', section: 'logical_reasoning', category_id: 'lr-flaw', difficulty: 1, passage_id: null },
+  { id: 'lr', section: 'logical_reasoning', category_id: 'lr-flaw', difficulty: 1, passage_id: null, last_correct: null, is_bookmarked: false },
   rc('b', 'p2', 'rc-detail', 1),
   rc('a', 'p1', 'rc-main-idea', 3),
   rc('c', 'p2', 'rc-structure', 4),

@@ -7,13 +7,15 @@ const lr = (id: string, category_id: string, difficulty: 1 | 2 | 3 | 4): Questio
   category_id,
   difficulty,
   passage_id: null,
+  last_correct: null,
+  is_bookmarked: false,
 })
 
 const questions: QuestionSummary[] = [
   lr('a', 'lr-flaw', 1),
   lr('b', 'lr-flaw', 3),
   lr('c', 'lr-weaken', 1),
-  { id: 'd', section: 'reading_comprehension', category_id: 'rc-detail', difficulty: 1, passage_id: 'p' },
+  { id: 'd', section: 'reading_comprehension', category_id: 'rc-detail', difficulty: 1, passage_id: 'p', last_correct: null, is_bookmarked: false },
 ]
 
 describe('filterQuestions', () => {

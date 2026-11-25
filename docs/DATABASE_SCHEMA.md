@@ -17,7 +17,10 @@ The exact tables are in `src-tauri/migrations/`; those files are authoritative. 
   - Finishing submits every selected answer. Unanswered questions get no attempt.
   - Ending early (`abandoned`) submits nothing more and keeps answers already submitted.
   - Answers are marked against the saved copy. The interface receives the key and explanations only after an answer is submitted or the session is finished.
-  - One targeted session per section can be unfinished at a time.
+  - One targeted session per section, and one custom session, can be unfinished at a time.
+  - Custom sessions have LR questions first, then whole passages, with no repeats. Chosen categories apply within their own section.
+  - "New" means never submitted. "Missed" means the most recent attempt was wrong. "Exclude correct" leaves out questions whose most recent attempt was right. A passage qualifies if any one of its questions meets every condition.
+  - Shuffled answers are relabeled A–E on screen, and the order is saved in the snapshot. Attempts store the original choices. A question whose text mentions choices by letter or position is not shuffled.
   - A Reading Comprehension session is made of whole passages. Each has all of its available questions, in imported order, and at least one must match the chosen filters. Both TypeScript and Rust enforce this.
   - A flag lasts for its session. A bookmark belongs to the question and can also change while reviewing a finished session.
 - Content with history or bookmarks cannot be deleted. Retire it instead.

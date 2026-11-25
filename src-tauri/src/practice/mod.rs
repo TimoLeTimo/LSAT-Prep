@@ -2,6 +2,7 @@
 //! or a crash loses nothing that was confirmed.
 
 mod clock;
+mod letters;
 mod model;
 #[cfg(test)]
 mod tests;
@@ -13,7 +14,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, 
 use crate::{
   db::DbError,
   import::{
-    package::{Label, Section},
+    package::{Label, Question, Section},
     store,
   },
 };
@@ -98,14 +99,27 @@ pub fn create(conn: &mut Connection, config: &Config, question_ids: &[String]) -
   let time = now(&tx)?;
   tx.execute(
     "INSERT INTO practice_sessions (id, session_type, configuration_json, status, started_at,
-       created_at, time_limit_seconds) VALUES (?1, 'targeted', ?2, 'in_progress', ?3, ?3, ?4)",
-    params![id, to_json(config)?, time, config.time_limit_seconds],
+       created_at, time_limit_seconds) VALUES (?1, ?5, ?2, 'in_progress', ?3, ?3, ?4)",
+    params![
+      id,
+      to_json(config)?,
+      time,
+      config.time_limit_seconds,
+      if config.custom.is_some() { "custom" } else { "targeted" }
+    ],
   )?;
-  let snapshots = question_ids
+  let mut snapshots = question_ids
     .iter()
     .map(|question_id| take_snapshot(&tx, question_id))
     .collect::<Result<Vec<_>>>()?;
   check_fit(&tx, config, &snapshots)?;
+  if config.custom.as_ref().is_some_and(|custom| custom.shuffle_answers) {
+    for snapshot in &mut snapshots {
+      if !letters::mentions_choices(&snapshot.question) {
+        snapshot.choice_order = random_order(&tx)?;
+      }
+    }
+  }
   for (position, (question_id, snapshot)) in question_ids.iter().zip(&snapshots).enumerate() {
     tx.prepare_cached(
       "INSERT INTO session_questions (id, session_id, question_id, display_order,
@@ -139,25 +153,67 @@ fn take_snapshot(conn: &Connection, id: &str) -> Result<Snapshot> {
     Some(passage_id) => Some(store::load_passage(conn, passage_id)?.ok_or(UNAVAILABLE)?),
     None => None,
   };
-  Ok(Snapshot { snapshot_version: 1, category_name, question, passage })
+  let choice_order = unshuffled();
+  Ok(Snapshot { snapshot_version: 1, category_name, question, passage, choice_order })
 }
 
+const MISFIT: PracticeError = PracticeError::Refused("A chosen question does not fit this session.");
+
 fn check_fit(conn: &Connection, config: &Config, snapshots: &[Snapshot]) -> Result<()> {
-  const MISFIT: PracticeError =
-    PracticeError::Refused("A chosen question does not fit this session.");
-  if snapshots.iter().any(|snapshot| snapshot.question.section != config.section) {
+  // LR questions come first, then passages.
+  let is_lr = |snapshot: &Snapshot| snapshot.question.section == Section::LogicalReasoning;
+  let lr_count = snapshots.iter().take_while(|snapshot| is_lr(snapshot)).count();
+  let (lr, rc) = snapshots.split_at(lr_count);
+  if rc.iter().any(is_lr) {
     return Err(MISFIT);
   }
-  match (config.section, config.passage_count) {
-    (Section::ReadingComprehension, Some(count)) => {
-      check_passage_sets(conn, config, snapshots, count)
-    }
-    (Section::LogicalReasoning, None) => {
-      let all_match = snapshots.iter().all(|snapshot| config.matches(&snapshot.question));
-      if all_match { Ok(()) } else { Err(MISFIT) }
-    }
-    _ => Err(MISFIT),
+  let expected = match (&config.custom, config.section, config.passage_count) {
+    (None, Some(Section::LogicalReasoning), None) => (snapshots.len(), 0),
+    (None, Some(Section::ReadingComprehension), Some(passages)) => (0, passages),
+    (Some(custom), None, passages) => (custom.lr_count, passages.unwrap_or(0)),
+    _ => return Err(MISFIT),
+  };
+  if lr.len() != expected.0 {
+    return Err(MISFIT);
   }
+  for snapshot in lr {
+    if !qualifies(conn, config, &snapshot.question)? {
+      return Err(MISFIT);
+    }
+  }
+  check_passage_sets(conn, config, rc, expected.1)
+}
+
+/// Whether a question matches the filters and, in a custom session, the earlier work.
+fn qualifies(conn: &Connection, config: &Config, question: &Question) -> Result<bool> {
+  let mut categories = Vec::new();
+  for id in &config.category_ids {
+    let category = store::load_category(conn, id)?
+      .ok_or(PracticeError::Refused("A chosen category was not found."))?;
+    if config.custom.is_none() || category.section == question.section {
+      categories.push(id);
+    }
+  }
+  if !config.matches(&categories, question) {
+    return Ok(false);
+  }
+  match &config.custom {
+    Some(custom) => Ok(custom.allows(history(conn, &question.id)?)),
+    None => Ok(true),
+  }
+}
+
+fn history(conn: &Connection, question_id: &str) -> rusqlite::Result<History> {
+  conn
+    .prepare_cached(
+      "SELECT
+         (SELECT is_correct FROM attempts WHERE question_id = ?1
+          ORDER BY attempted_at DESC, rowid DESC LIMIT 1),
+         EXISTS (SELECT 1 FROM bookmarks WHERE question_id = ?1)",
+    )?
+    .query_row([question_id], |row| {
+      Ok(History { last_correct: row.get(0)?, is_bookmarked: row.get(1)? })
+    })
 }
 
 /// Each passage must appear once, with all of its available questions, in order. At least
@@ -188,28 +244,45 @@ fn check_passage_sets(
         "A passage must keep all of its questions, in order. Start again.",
       ));
     }
-    if !set.iter().any(|snapshot| config.matches(&snapshot.question)) {
+    let mut any = false;
+    for snapshot in set {
+      any = any || qualifies(conn, config, &snapshot.question)?;
+    }
+    if !any {
       return Err(PracticeError::Refused("A chosen passage does not fit this session."));
     }
   }
   Ok(())
 }
 
-fn unfinished_id(conn: &Connection, section: Section) -> rusqlite::Result<Option<String>> {
+/// Fisher–Yates shuffle, with randomness from SQLite.
+fn random_order(conn: &Connection) -> rusqlite::Result<[Label; 5]> {
+  let mut order = unshuffled();
+  for last in (1..order.len()).rev() {
+    let other: i64 =
+      conn.query_row("SELECT (random() & 0x7fffffffffff) % ?1", [last as i64 + 1], |row| row.get(0))?;
+    order.swap(last, other as usize);
+  }
+  Ok(order)
+}
+
+/// With no section, finds a custom session.
+fn unfinished_id(conn: &Connection, section: Option<Section>) -> rusqlite::Result<Option<String>> {
   conn
     .query_row(
       "SELECT id FROM practice_sessions
-       WHERE status = 'in_progress' AND session_type = 'targeted'
-         AND configuration_json ->> 'section' = ?1
+       WHERE status = 'in_progress'
+         AND session_type = CASE WHEN ?1 IS NULL THEN 'custom' ELSE 'targeted' END
+         AND configuration_json ->> 'section' IS ?1
        ORDER BY created_at DESC LIMIT 1",
-      [section.as_str()],
+      [section.map(Section::as_str)],
       |row| row.get(0),
     )
     .optional()
 }
 
-/// The session to resume, if there is one.
-pub fn unfinished(conn: &Connection, section: Section) -> Result<Option<Session>> {
+/// The session to resume, if there is one. With no section, finds a custom session.
+pub fn unfinished(conn: &Connection, section: Option<Section>) -> Result<Option<Session>> {
   unfinished_id(conn, section)?.map(|id| load(conn, &id)).transpose()
 }
 
@@ -322,7 +395,9 @@ pub fn select(conn: &mut Connection, id: &str, choice: Option<Label>) -> Result<
   if question.submitted {
     return Err(LOCKED);
   }
-  let selected = choice.map(|label| choice_id(&question.question_id, label));
+  let snapshot = load_snapshot(&tx, id)?;
+  let selected =
+    choice.map(|shown| choice_id(&question.question_id, snapshot.original(shown)));
   let time = now(&tx)?;
   tx.execute(
     "UPDATE session_questions SET selected_choice_id = ?2,
@@ -452,13 +527,17 @@ fn end(conn: &Connection, session_id: &str, status: &str) -> rusqlite::Result<()
   Ok(())
 }
 
-/// Marks the answer against the saved copy, which is what the user saw.
-fn record_attempt(conn: &Connection, id: &str) -> Result<()> {
-  let snapshot: Snapshot = conn.query_row(
+fn load_snapshot(conn: &Connection, id: &str) -> rusqlite::Result<Snapshot> {
+  conn.query_row(
     "SELECT content_snapshot_json FROM session_questions WHERE id = ?1",
     [id],
     |row| from_json(row, 0),
-  )?;
+  )
+}
+
+/// Marks the answer against the saved copy, which is what the user saw.
+fn record_attempt(conn: &Connection, id: &str) -> Result<()> {
+  let snapshot = load_snapshot(conn, id)?;
   conn.execute(
     "INSERT INTO attempts (id, session_question_id, session_id, question_id, selected_choice_id,
        is_correct, time_spent_seconds, attempted_at, attempt_kind)

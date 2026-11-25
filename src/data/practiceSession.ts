@@ -2,18 +2,33 @@ import { invoke } from '@tauri-apps/api/core'
 import type { ChoiceLabel, Difficulty, Section } from '../domain/content/types'
 
 /** These shapes match the Rust types in src-tauri/src/practice/model.rs. */
+export type Subset = 'any' | 'new' | 'missed' | 'bookmarked'
+
+/** Choices that only custom sessions have. */
+export interface CustomOptions {
+  lr_count: number
+  subset: Subset
+  /** Leaves out questions whose most recent attempt was right. */
+  exclude_correct: boolean
+  shuffle_questions: boolean
+  shuffle_answers: boolean
+}
+
 export interface SessionConfig {
-  section: Section
-  /** Empty means any. */
+  /** Null for custom sessions, which can mix sections. */
+  section: Section | null
+  /** Empty means any. In a custom session, this applies within each section separately. */
   category_ids: string[]
   /** Empty means any. */
   difficulties: Difficulty[]
   question_count: number
   explanations: 'after_each' | 'at_end'
-  /** RC only: how many whole passage sets. Null for LR. */
+  /** How many whole RC passage sets. Null for targeted LR. */
   passage_count: number | null
   /** Null means untimed. */
   time_limit_seconds: number | null
+  /** Null for a targeted session. */
+  custom: CustomOptions | null
 }
 
 export interface Outcome {
@@ -63,7 +78,8 @@ export interface ClockReading {
 
 /** Each call rejects with a message that can be shown to the user. */
 export const practiceSession = {
-  unfinished: (section: Section) => invoke<Session | null>('unfinished_session', { section }),
+  /** With a null section, finds the unfinished custom session. */
+  unfinished: (section: Section | null) => invoke<Session | null>('unfinished_session', { section }),
   create: (config: SessionConfig, questionIds: string[]) =>
     invoke<Session>('create_session', { config, questionIds }),
   select: (id: string, choice: ChoiceLabel | null) => invoke<void>('select_answer', { id, choice }),

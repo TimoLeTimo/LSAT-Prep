@@ -131,9 +131,10 @@ pub fn confirm_import(
 
 // ---------------------------------------------------------------- Practice
 
+/// With a null section, finds the unfinished custom session.
 #[tauri::command(async)]
 pub fn unfinished_session(
-  section: Section,
+  section: Option<Section>,
   database: State<Database>,
 ) -> Result<Option<practice::Session>, String> {
   practice::unfinished(&*database.get()?, section).map_err(text)
@@ -461,6 +462,43 @@ mod tests {
     assert_eq!(passage["texts"].as_array().unwrap().len(), 2);
     let section = json!({ "section": "reading_comprehension" });
     assert_eq!(call(&window, "unfinished_session", section), Ok(session));
+  }
+
+  #[test]
+  fn the_interface_can_complete_a_custom_session() {
+    let dir = TempDir::new();
+    let mut conn = db::open(&dir.0).unwrap();
+    let path = dir.0.join("package.json");
+    std::fs::write(&path, VALID).unwrap();
+    let mut import = Session::default();
+    import.choose(&conn, &path).unwrap();
+    import.preview(&mut conn).unwrap();
+    import.confirm(&mut conn).unwrap();
+    let app = app(Ok(conn));
+    let window = window(&app);
+    let call = |command: &str, body: Value| call(&window, command, body);
+    let config = json!({
+      "section": null, "category_ids": [], "difficulties": [], "question_count": 2,
+      "explanations": "at_end", "passage_count": 1, "time_limit_seconds": null,
+      "custom": { "lr_count": 1, "subset": "new", "exclude_correct": true,
+        "shuffle_questions": true, "shuffle_answers": true }
+    });
+    let body = json!({ "config": config, "questionIds": ["test-lr-1", "test-rc-1"] });
+    let session = call("create_session", body.clone()).unwrap();
+    assert_eq!(call("unfinished_session", json!({ "section": null })), Ok(session.clone()));
+    let lr = call("unfinished_session", json!({ "section": "logical_reasoning" }));
+    assert_eq!(lr, Ok(Value::Null));
+    let question = &session["questions"][0];
+    let correct = question["choices"].as_array().unwrap().iter()
+      .find(|choice| choice["text"] == "Test choice C").unwrap();
+    let answer = json!({ "id": question["id"], "choice": correct["label"] });
+    call("select_answer", answer).unwrap();
+    let done = call("finish_session", json!({ "sessionId": session["id"] })).unwrap();
+    assert_eq!(done["questions"][0]["outcome"]["is_correct"], true);
+    let index = call("question_index", json!({})).unwrap();
+    assert_eq!(index["questions"][0]["last_correct"], true);
+    // No longer new.
+    assert!(call("create_session", body).is_err());
   }
 
   #[test]

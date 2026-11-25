@@ -32,13 +32,14 @@ fn database(dir: &TempDir) -> Connection {
 
 fn config(explanations: Explanations, question_count: usize) -> Config {
   Config {
-    section: Section::LogicalReasoning,
+    section: Some(Section::LogicalReasoning),
     category_ids: vec![],
     difficulties: vec![],
     question_count,
     explanations,
     passage_count: None,
     time_limit_seconds: None,
+    custom: None,
   }
 }
 
@@ -105,7 +106,7 @@ fn refuses_questions_that_do_not_fit() {
   for (config, questions, expected) in cases {
     assert!(refusal(create(&mut conn, &config, &questions)).contains(expected), "{expected}");
   }
-  assert_eq!(unfinished(&conn, Section::LogicalReasoning).unwrap(), None);
+  assert_eq!(unfinished(&conn, Some(Section::LogicalReasoning)).unwrap(), None);
 }
 
 #[test]
@@ -133,7 +134,7 @@ fn refuses_a_question_whose_passage_is_retired() {
   let mut conn = database(&dir);
   conn.execute("UPDATE passages SET status = 'retired'", []).unwrap();
   let rc = Config {
-    section: Section::ReadingComprehension,
+    section: Some(Section::ReadingComprehension),
     passage_count: Some(1),
     ..config(Explanations::AtEnd, 1)
   };
@@ -149,7 +150,7 @@ fn allows_one_unfinished_session_for_each_section() {
   let again = create(&mut conn, &config(Explanations::AtEnd, 1), &ids(&[4]));
   assert!(refusal(again).contains("current session"));
   let rc = Config {
-    section: Section::ReadingComprehension,
+    section: Some(Section::ReadingComprehension),
     passage_count: Some(1),
     ..config(Explanations::AtEnd, 1)
   };
@@ -181,7 +182,7 @@ fn everything_survives_without_a_clean_close() {
   for name in ["lsat-prep.db", "lsat-prep.db-wal"] {
     std::fs::copy(dir.0.join(name), after.0.join(name)).unwrap();
   }
-  let recovered = unfinished(&db::open(&after.0).unwrap(), Section::LogicalReasoning).unwrap().unwrap();
+  let recovered = unfinished(&db::open(&after.0).unwrap(), Some(Section::LogicalReasoning)).unwrap().unwrap();
   assert_eq!(recovered, expected);
   assert_eq!(recovered.current_position, 2);
   assert_eq!(recovered.questions[0].time_spent_seconds, 35);
@@ -203,7 +204,7 @@ fn resuming_shows_the_saved_copy_even_if_content_changes() {
        UPDATE question_categories SET name = 'changed';",
     )
     .unwrap();
-  assert_eq!(unfinished(&conn, Section::LogicalReasoning).unwrap().unwrap(), before);
+  assert_eq!(unfinished(&conn, Some(Section::LogicalReasoning)).unwrap().unwrap(), before);
   // Marked against what was shown (key C), not the changed key.
   select(&mut conn, &before.questions[0].id, Some(Label::C)).unwrap();
   let done = finish(&mut conn, &before.id).unwrap();
@@ -280,7 +281,7 @@ fn finishing_submits_selected_answers_only() {
     done.questions.iter().map(|question| question.outcome.as_ref().unwrap().is_correct).collect();
   assert_eq!(results, [Some(true), Some(false), None]);
   assert_eq!(attempts(&conn).len(), 2);
-  assert_eq!(unfinished(&conn, Section::LogicalReasoning).unwrap(), None);
+  assert_eq!(unfinished(&conn, Some(Section::LogicalReasoning)).unwrap(), None);
 }
 
 #[test]
@@ -655,7 +656,7 @@ fn a_clock_for_one_session_does_not_affect_another() {
   let dir = TempDir::new();
   let (mut conn, session, t) = timed(&dir);
   let rc = Config {
-    section: Section::ReadingComprehension,
+    section: Some(Section::ReadingComprehension),
     passage_count: Some(1),
     time_limit_seconds: Some(60),
     ..config(Explanations::AtEnd, 1)
@@ -673,7 +674,7 @@ fn a_clock_for_one_session_does_not_affect_another() {
 fn sessions_saved_before_timers_existed_are_untimed() {
   let old = r#"{"section":"logical_reasoning","category_ids":[],"difficulties":[],"question_count":1,"explanations":"at_end"}"#;
   let config: Config = serde_json::from_str(old).unwrap();
-  assert_eq!((config.time_limit_seconds, config.passage_count), (None, None));
+  assert_eq!((config.time_limit_seconds, config.passage_count, config.custom), (None, None, None));
 }
 
 // ---------------------------------------------------------------- Reading Comprehension
@@ -716,7 +717,7 @@ fn rc_database(dir: &TempDir) -> Connection {
 
 fn rc_config(passage_count: usize, question_count: usize) -> Config {
   Config {
-    section: Section::ReadingComprehension,
+    section: Some(Section::ReadingComprehension),
     passage_count: Some(passage_count),
     ..config(Explanations::AtEnd, question_count)
   }
@@ -846,5 +847,300 @@ fn a_passage_survives_recovery_exactly_as_shown() {
     .unwrap();
   drop(conn);
   let conn = db::open(&dir.0).unwrap();
-  assert_eq!(unfinished(&conn, Section::ReadingComprehension).unwrap(), Some(before));
+  assert_eq!(unfinished(&conn, Some(Section::ReadingComprehension)).unwrap(), Some(before));
+}
+
+// ---------------------------------------------------------------- Custom sessions
+
+/// TEST DATA ONLY: LR q1-q4 (keys C) and RC z, a, m on p1 and b, c on p2 (keys C).
+fn mixed_database(dir: &TempDir) -> Connection {
+  let mut conn = rc_database(dir);
+  let mut package: Value =
+    serde_json::from_str(include_str!("../../../tests/fixtures/valid-package.json")).unwrap();
+  let template = package["questions"][0].clone();
+  package["package_id"] = json!("lr-package");
+  package["passages"] = json!([]);
+  package["questions"] = json!([]);
+  for (number, category) in [(1, "lr-flaw"), (2, "lr-flaw"), (3, "lr-weaken"), (4, "lr-weaken")] {
+    let mut question = template.clone();
+    question["id"] = json!(format!("q{number}"));
+    question["primary_category"] = json!(category);
+    question["explanations"] = json!({
+      "A": "Why one.", "B": "Why two.", "C": "Why three.", "D": "Why four.", "E": "Why five."
+    });
+    for (choice, text) in question["choices"].as_array_mut().unwrap().iter_mut().zip(["one", "two", "three", "four", "five"]) {
+      choice["text"] = json!(text);
+    }
+    if number == 4 {
+      question["explanations"]["A"] = json!("Unlike B, this is too broad.");
+    }
+    package["questions"].as_array_mut().unwrap().push(question);
+  }
+  let path = dir.0.join("lr.json");
+  std::fs::write(&path, package.to_string()).unwrap();
+  let mut session = import::Session::default();
+  session.choose(&conn, &path).unwrap();
+  session.preview(&mut conn).unwrap();
+  session.confirm(&mut conn).unwrap();
+  conn
+}
+
+fn custom(lr_count: usize, passages: usize, questions: usize) -> Config {
+  Config {
+    section: None,
+    passage_count: Some(passages),
+    custom: Some(Custom {
+      lr_count,
+      subset: Subset::Any,
+      exclude_correct: false,
+      shuffle_questions: false,
+      shuffle_answers: false,
+    }),
+    ..config(Explanations::AtEnd, questions)
+  }
+}
+
+fn with(mut config: Config, change: impl Fn(&mut Custom)) -> Config {
+  change(config.custom.as_mut().unwrap());
+  config
+}
+
+fn words(ids: &str) -> Vec<String> {
+  ids.split_whitespace().map(String::from).collect()
+}
+
+/// Submits one answer to a question, in its own session.
+fn answer(conn: &mut Connection, id: &str, choice: Label) {
+  let session = if id.starts_with('q') {
+    create(conn, &custom(1, 0, 1), &words(id)).unwrap()
+  } else {
+    create(conn, &custom(0, 1, 3), &words("z a m")).unwrap()
+  };
+  let question = session.questions.iter().find(|question| question.question_id == id).unwrap();
+  select(conn, &question.id, Some(choice)).unwrap();
+  finish(conn, &session.id).unwrap();
+}
+
+fn allowed(conn: &mut Connection, config: &Config, ids: &str) -> bool {
+  match create(conn, config, &words(ids)) {
+    Ok(session) => {
+      abandon(conn, &session.id).unwrap();
+      true
+    }
+    Err(PracticeError::Refused(_)) => false,
+    Err(error) => panic!("{error}"),
+  }
+}
+
+#[test]
+fn mixes_lr_questions_and_whole_passages() {
+  let dir = TempDir::new();
+  let mut conn = mixed_database(&dir);
+  assert!(allowed(&mut conn, &custom(2, 1, 4), "q3 q1 b c"));
+  assert!(allowed(&mut conn, &custom(2, 0, 2), "q3 q1"));
+  assert!(allowed(&mut conn, &custom(0, 2, 5), "b c z a m"));
+  for (config, ids) in [
+    (custom(2, 1, 4), "b c q3 q1"),
+    (custom(2, 1, 4), "q3 b c q1"),
+    (custom(1, 1, 4), "q3 q1 b c"),
+    (custom(2, 0, 4), "q3 q1 b c"),
+    (custom(2, 2, 4), "q3 q1 b c"),
+    (custom(2, 1, 3), "q3 q1 b"),
+    (custom(2, 1, 4), "q3 q1 c b"),
+    (custom(2, 0, 2), "q1 q1"),
+    (custom(0, 0, 0), ""),
+  ] {
+    assert!(!allowed(&mut conn, &config, ids), "{ids}");
+  }
+  let with_section = Config { section: Some(Section::LogicalReasoning), ..custom(1, 0, 1) };
+  assert!(!allowed(&mut conn, &with_section, "q1"));
+  let without_custom = Config { custom: None, ..custom(1, 0, 1) };
+  assert!(!allowed(&mut conn, &without_custom, "q1"));
+}
+
+#[test]
+fn custom_categories_apply_within_their_own_section() {
+  let dir = TempDir::new();
+  let mut conn = mixed_database(&dir);
+  let chosen = |ids: &str| Config { category_ids: words(ids), ..custom(1, 1, 3) };
+  assert!(allowed(&mut conn, &chosen("lr-flaw"), "q1 b c"));
+  assert!(!allowed(&mut conn, &chosen("lr-flaw"), "q3 b c"));
+  assert!(allowed(&mut conn, &chosen("rc-structure"), "q3 b c"));
+  let z = Config { question_count: 4, ..chosen("rc-structure") };
+  assert!(!allowed(&mut conn, &z, "q3 z a m"));
+  assert!(!allowed(&mut conn, &chosen("lr-weaken rc-structure"), "q1 b c"));
+  assert!(!allowed(&mut conn, &chosen("missing"), "q1 b c"));
+}
+
+#[test]
+fn subsets_use_the_most_recent_attempt() {
+  let dir = TempDir::new();
+  let mut conn = mixed_database(&dir);
+  answer(&mut conn, "q1", Label::C);
+  answer(&mut conn, "q2", Label::A);
+  // q3: right, then wrong. q4: wrong, then right.
+  for (id, first, second) in [("q3", Label::C, Label::B), ("q4", Label::D, Label::C)] {
+    answer(&mut conn, id, first);
+    answer(&mut conn, id, second);
+  }
+  // Only the order of these decides which is most recent.
+  let times: i64 = conn
+    .query_row("SELECT count(DISTINCT question_id) FROM attempts", [], |row| row.get(0))
+    .unwrap();
+  assert_eq!(times, 4);
+  let found = |conn: &mut Connection, subset: Subset, exclude_correct: bool| -> String {
+    let config = with(custom(1, 0, 1), |custom| {
+      custom.subset = subset;
+      custom.exclude_correct = exclude_correct;
+    });
+    ["q1", "q2", "q3", "q4"].into_iter().filter(|id| allowed(conn, &config, id)).collect()
+  };
+  assert_eq!(found(&mut conn, Subset::Any, false), "q1q2q3q4");
+  assert_eq!(found(&mut conn, Subset::Any, true), "q2q3");
+  assert_eq!(found(&mut conn, Subset::Missed, false), "q2q3");
+  assert_eq!(found(&mut conn, Subset::New, false), "");
+  set_bookmark(&mut conn, "q1", true).unwrap();
+  set_bookmark(&mut conn, "q3", true).unwrap();
+  assert_eq!(found(&mut conn, Subset::Bookmarked, false), "q1q3");
+  assert_eq!(found(&mut conn, Subset::Bookmarked, true), "q3");
+}
+
+#[test]
+fn seeing_a_question_without_answering_keeps_it_new() {
+  let dir = TempDir::new();
+  let mut conn = mixed_database(&dir);
+  let session = create(&mut conn, &custom(2, 0, 2), &words("q1 q2")).unwrap();
+  select(&mut conn, &session.questions[0].id, Some(Label::A)).unwrap();
+  abandon(&mut conn, &session.id).unwrap();
+  let new = with(custom(2, 0, 2), |custom| custom.subset = Subset::New);
+  assert!(allowed(&mut conn, &new, "q1 q2"));
+}
+
+#[test]
+fn a_passage_qualifies_if_any_question_does() {
+  let dir = TempDir::new();
+  let mut conn = mixed_database(&dir);
+  answer(&mut conn, "a", Label::B);
+  let missed = with(custom(0, 1, 3), |custom| custom.subset = Subset::Missed);
+  assert!(allowed(&mut conn, &missed, "z a m"));
+  let other = with(custom(0, 1, 2), |custom| custom.subset = Subset::Missed);
+  assert!(!allowed(&mut conn, &other, "b c"));
+  // The missed question must be the one that matches the category.
+  let detail = Config { category_ids: words("rc-detail"), ..missed.clone() };
+  assert!(!allowed(&mut conn, &detail, "z a m"));
+  let main = Config { category_ids: words("rc-main-idea"), ..missed };
+  assert!(allowed(&mut conn, &main, "z a m"));
+}
+
+#[test]
+fn custom_sessions_are_unfinished_separately() {
+  let dir = TempDir::new();
+  let mut conn = mixed_database(&dir);
+  let first = create(&mut conn, &custom(1, 0, 1), &words("q1")).unwrap();
+  let lr = create(&mut conn, &config(Explanations::AtEnd, 1), &words("q2")).unwrap();
+  let rc = rc_create(&mut conn, &rc_config(1, 2), "bc").unwrap();
+  assert!(refusal(create(&mut conn, &custom(1, 0, 1), &words("q3"))).contains("current session"));
+  assert_eq!(unfinished(&conn, None).unwrap(), Some(first));
+  assert_eq!(unfinished(&conn, Some(Section::LogicalReasoning)).unwrap(), Some(lr));
+  assert_eq!(unfinished(&conn, Some(Section::ReadingComprehension)).unwrap(), Some(rc));
+  let kind: String = conn
+    .query_row("SELECT session_type FROM practice_sessions ORDER BY rowid LIMIT 1", [], |row| row.get(0))
+    .unwrap();
+  assert_eq!(kind, "custom");
+}
+
+// ---------------------------------------------------------------- Shuffled answers
+
+fn shuffled(conn: &mut Connection, id: &str) -> Session {
+  let config = with(custom(1, 0, 1), |custom| custom.shuffle_answers = true);
+  let mut config = config;
+  config.explanations = Explanations::AfterEach;
+  create(conn, &config, &words(id)).unwrap()
+}
+
+fn texts(question: &SessionQuestion) -> String {
+  question.choices.iter().map(|choice| choice.text.as_str()).collect::<Vec<_>>().join(" ")
+}
+
+#[test]
+fn shuffled_answers_stay_consistent_on_screen_and_in_records() {
+  let dir = TempDir::new();
+  let mut conn = mixed_database(&dir);
+  for _ in 0..30 {
+    for wanted in ["one", "three"] {
+      let session = shuffled(&mut conn, "q1");
+      let question = &session.questions[0];
+      let labels: Vec<_> = question.choices.iter().map(|choice| choice.label).collect();
+      assert_eq!(labels, crate::import::package::LABELS);
+      let picked = question.choices.iter().find(|choice| choice.text == wanted).unwrap().label;
+      select(&mut conn, &question.id, Some(picked)).unwrap();
+      let resumed = unfinished(&conn, None).unwrap().unwrap();
+      assert_eq!(resumed.questions[0].choices, question.choices);
+      assert_eq!(resumed.questions[0].selected, Some(picked));
+
+      let checked = submit(&mut conn, &question.id).unwrap();
+      let outcome = checked.questions[0].outcome.as_ref().unwrap();
+      assert_eq!(outcome.is_correct, Some(wanted == "three"));
+      // Each explanation sits with its own choice, and the key with the right text.
+      for choice in &question.choices {
+        assert_eq!(outcome.explanations.get(choice.label), format!("Why {}.", choice.text));
+        assert_eq!(choice.label == outcome.correct_choice, choice.text == "three");
+      }
+      finish(&mut conn, &session.id).unwrap();
+      let recorded = attempts(&conn).pop().unwrap();
+      assert_eq!(recorded.0, if wanted == "three" { "q1:C" } else { "q1:A" });
+      assert_eq!(recorded.1, wanted == "three");
+    }
+  }
+}
+
+#[test]
+fn every_choice_reaches_every_position() {
+  let dir = TempDir::new();
+  let mut conn = mixed_database(&dir);
+  let mut seen = BTreeSet::new();
+  for _ in 0..150 {
+    let session = shuffled(&mut conn, "q2");
+    for choice in &session.questions[0].choices {
+      seen.insert(format!("{}{}", choice.label.as_str(), choice.text));
+    }
+    abandon(&mut conn, &session.id).unwrap();
+  }
+  assert_eq!(seen.len(), 25);
+}
+
+#[test]
+fn questions_that_mention_choices_are_not_shuffled() {
+  let dir = TempDir::new();
+  let mut conn = mixed_database(&dir);
+  for _ in 0..20 {
+    let session = shuffled(&mut conn, "q4");
+    assert_eq!(texts(&session.questions[0]), "one two three four five");
+    abandon(&mut conn, &session.id).unwrap();
+  }
+}
+
+#[test]
+fn answers_are_not_shuffled_unless_chosen() {
+  let dir = TempDir::new();
+  let mut conn = mixed_database(&dir);
+  for _ in 0..20 {
+    let session = create(&mut conn, &custom(1, 0, 1), &words("q1")).unwrap();
+    assert_eq!(texts(&session.questions[0]), "one two three four five");
+    abandon(&mut conn, &session.id).unwrap();
+  }
+}
+
+#[test]
+fn sessions_saved_before_shuffling_existed_still_open() {
+  let dir = TempDir::new();
+  let mut conn = mixed_database(&dir);
+  let session = create(&mut conn, &custom(1, 0, 1), &words("q1")).unwrap();
+  select(&mut conn, &session.questions[0].id, Some(Label::D)).unwrap();
+  let mut old: Value = conn
+    .query_row("SELECT content_snapshot_json FROM session_questions", [], |row| from_json(row, 0))
+    .unwrap();
+  old.as_object_mut().unwrap().remove("choice_order").unwrap();
+  let snapshot: Snapshot = serde_json::from_value(old).unwrap();
+  assert_eq!(snapshot.choice_order, unshuffled());
 }

@@ -8,6 +8,8 @@ const questions = Array.from({ length: 10 }, (_, index): QuestionSummary => ({
   category_id: index < 4 ? 'lr-flaw' : 'lr-weaken',
   difficulty: 2,
   passage_id: null,
+  last_correct: null,
+  is_bookmarked: false,
 }))
 const flaws = { ...anyQuestion, categoryIds: ['lr-flaw'] }
 
