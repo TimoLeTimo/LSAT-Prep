@@ -42,7 +42,7 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [x] Verify imports do not change attempts, bookmarks, sessions, or statistics.
 - [x] Add category and difficulty filters.
 - [x] Create content QA checklist.
-- [ ] Confirm in the real window that re-importing a package is blocked and recorded.
+- [x] Confirm in the real window that re-importing a package is blocked and recorded.
 - [x] Draft small original seed question set.
 - [ ] Review, approve, and import the seed question set.
 
@@ -53,10 +53,10 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [x] Question display.
 - [x] Answer selection.
 - [x] Next/previous navigation.
-- [ ] Timer. (Built; real-window and sleep checks remain.)
-- [ ] Bookmarking. (Built; real-window check remains.)
+- [ ] Timer. (Counting and pausing confirmed; running out of time and sleep remain.)
+- [x] Bookmarking.
 - [ ] Explanations. (Built; real-window check remains.)
-- [ ] Autosave and session recovery. (Built; real-window check remains.)
+- [x] Autosave and session recovery. (Resumed after closing the app; an abrupt quit is untested.)
 
 ## Milestone 4 — Reading Comprehension
 - [x] Choose whole passage sets and start RC sessions.
@@ -68,17 +68,17 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [ ] Review with the passage visible. (Built; real-window check remains.)
 
 ## Milestone 5 — Custom Practice
-- [x] Selection, subset, ordering, and answer-shuffling rules (no screens yet).
-- [ ] Section selection.
-- [ ] Question count.
-- [ ] Difficulty filters.
-- [ ] Category filters.
-- [ ] Timed/untimed/custom time.
-- [ ] Explanation timing.
-- [ ] Question subset filters.
-- [ ] Randomization.
+- [x] Selection, subset, ordering, and answer-shuffling rules.
+- [ ] Section selection. (Built; real-window check remains.)
+- [ ] Question count. (Built; real-window check remains.)
+- [ ] Difficulty filters. (Built; real-window check remains.)
+- [ ] Category filters. (Built; real-window check remains.)
+- [ ] Timed/untimed/custom time. (Built; real-window check remains.)
+- [ ] Explanation timing. (Built; real-window check remains.)
+- [ ] Question subset filters. (Built; real-window check remains.)
+- [ ] Randomization. (Built; real-window check remains.)
 - [ ] Saved templates.
-- [ ] Availability validation.
+- [ ] Availability validation. (Built; real-window check remains.)
 
 ## Milestone 6 — Practice tests
 - [ ] Custom section tests.

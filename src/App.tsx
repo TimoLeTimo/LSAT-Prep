@@ -13,9 +13,10 @@ const otherTitles: Partial<Record<Route, string>> = {
   'question-bank': 'Question Bank Management',
 }
 
-const practiceSections: Partial<Record<Route, Section>> = {
+const practiceSections: Partial<Record<Route, Section | null>> = {
   'logical-reasoning': 'logical_reasoning',
   'reading-comprehension': 'reading_comprehension',
+  'custom-practice': null,
 }
 
 function App() {
@@ -29,8 +30,8 @@ function App() {
       {route === 'menu' && <MainMenu />}
       {route === 'settings' && <SettingsScreen />}
       {route === 'question-bank' && <QuestionBankScreen />}
-      {practiceSection && <PracticeScreen key={route} section={practiceSection} />}
-      {destination && !practiceSection && <PlaceholderScreen key={route} title={title} />}
+      {practiceSection !== undefined && <PracticeScreen key={route} section={practiceSection} />}
+      {destination && practiceSection === undefined && <PlaceholderScreen key={route} title={title} />}
     </AppFrame>
   )
 }

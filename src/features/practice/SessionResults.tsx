@@ -70,15 +70,15 @@ function Summary({ controller, state, onReview, onDone }: SummaryProps) {
         )}
       </div>
       <p className="mt-6 text-muted">Choose a question to see its explanations.</p>
-      {groupByPassage(session.questions).map(({ passageId, positions }, group) => (
+      {groupByPassage(session.questions).map(({ label, positions }, group) => (
         <section key={positions[0]} className="mt-3">
-          {passageId !== null && (
+          {label !== null && (
             <h3 id={`results-${group}`} className="mt-5 mb-2 font-semibold">
-              Passage {group + 1}
+              {label}
             </h3>
           )}
           <ol
-            aria-labelledby={passageId === null ? undefined : `results-${group}`}
+            aria-labelledby={label === null ? undefined : `results-${group}`}
             className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface shadow-card"
           >
             {positions.map((index) => (

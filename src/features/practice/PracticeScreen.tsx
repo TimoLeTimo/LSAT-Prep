@@ -9,16 +9,22 @@ import { practiceSession, type Session } from '../../data/practiceSession'
 import { getQuestionIndex, type QuestionIndex } from '../../data/questionBank'
 import { sectionNames } from '../../domain/content/names'
 import type { Section } from '../../domain/content/types'
+import { CustomSetup } from './CustomSetup'
 import { ResumePanel } from './ResumePanel'
 import { SessionScreen } from './SessionScreen'
 import { SessionSetup } from './SessionSetup'
 
-/** Setup, practice, and results for one section. */
-export function PracticeScreen({ section }: { section: Section }) {
+interface PracticeProps {
+  /** Null for custom practice, which can mix sections. */
+  section: Section | null
+}
+
+/** Setup, practice, and results. */
+export function PracticeScreen({ section }: PracticeProps) {
   return (
     <>
       <BackLink href={routeHref('menu')}>Main Menu</BackLink>
-      <PageHeading>{sectionNames[section]}</PageHeading>
+      <PageHeading>{section === null ? 'Custom Practice' : sectionNames[section]}</PageHeading>
       <div className="mt-8">
         {isTauri() ? (
           <Practice section={section} />
@@ -37,7 +43,7 @@ type View =
   | { name: 'resume'; session: Session }
   | { name: 'session'; session: Session }
 
-function Practice({ section }: { section: Section }) {
+function Practice({ section }: PracticeProps) {
   const [view, setView] = useState<View>({ name: 'loading' })
   const [index, setIndex] = useState<QuestionIndex | null>(null)
 
@@ -87,12 +93,10 @@ function Practice({ section }: { section: Section }) {
     )
   }
   if (view.name === 'loading' || index === null) return <p role="status">Loading…</p>
-  return (
-    <SessionSetup
-      section={section}
-      index={index}
-      onStarted={(session) => setView({ name: 'session', session })}
-      onStale={refreshIndex}
-    />
-  )
+  const setup = {
+    index,
+    onStarted: (session: Session) => setView({ name: 'session', session }),
+    onStale: refreshIndex,
+  }
+  return section === null ? <CustomSetup {...setup} /> : <SessionSetup section={section} {...setup} />
 }

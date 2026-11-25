@@ -1,71 +1,54 @@
 import { useState } from 'react'
-import { routeHref } from '../../app/routes'
 import { Button } from '../../components/Button'
 import { count } from '../../components/count'
-import { errorMessage } from '../../data/errorMessage'
-import { practiceSession, type Session, type SessionConfig } from '../../data/practiceSession'
+import type { Session, SessionConfig } from '../../data/practiceSession'
 import type { QuestionIndex } from '../../data/questionBank'
-import { difficultyNames } from '../../domain/content/names'
-import { DIFFICULTIES, type Section } from '../../domain/content/types'
+import type { Section } from '../../domain/content/types'
 import { choosePassages, findPassageSets } from '../../domain/practice/choosePassages'
 import { chooseQuestions } from '../../domain/practice/chooseQuestions'
 import { filterQuestions, type QuestionFilter } from '../../domain/practice/filterQuestions'
+import { EmptyBank } from './EmptyBank'
+import { Check, Group, NumberField, StartError } from './fields'
+import { DifficultyFields, ExplanationFields, TimeFields } from './sharedFields'
+import { useStart } from './useStart'
+import { useTimeLimit } from './useTimeLimit'
+import { toggle, wholeNumber } from './wholeNumber'
 
 /** LR sessions are chosen by question, and RC sessions by whole passage. */
 const amounts = {
   logical_reasoning: { unit: 'question', label: 'Number of questions', max: 500, usual: 10 },
   reading_comprehension: { unit: 'passage', label: 'Number of passages', max: 50, usual: 4 },
 }
-const MAX_MINUTES = 360
 
 interface SessionSetupProps {
   section: Section
   index: QuestionIndex
   onStarted: (session: Session) => void
-  /** Called when starting fails, because the question bank may have changed. */
   onStale: () => void
 }
 
+/** Setup for one section. */
 export function SessionSetup({ section, index, onStarted, onStale }: SessionSetupProps) {
-  const [categoryIds, setCategoryIds] = useState<string[]>([])
-  const [difficulties, setDifficulties] = useState<SessionConfig['difficulties']>([])
-  const inSection = { section, categoryIds: [], difficulties: [] }
   const { unit, label, max, usual } = amounts[section]
   const isByPassage = unit === 'passage'
   const countAvailable = (filter: QuestionFilter) =>
     isByPassage
       ? findPassageSets(index.questions, filter).length
       : filterQuestions(index.questions, filter).length
-  const total = countAvailable(inSection)
+  const total = countAvailable({ section, categoryIds: [], difficulties: [] })
+
+  const [categoryIds, setCategoryIds] = useState<string[]>([])
+  const [difficulties, setDifficulties] = useState<SessionConfig['difficulties']>([])
   const [wanted, setWanted] = useState(String(Math.min(usual, total)))
   const [explanations, setExplanations] = useState<SessionConfig['explanations']>('after_each')
-  const [isTimed, setIsTimed] = useState(false)
-  const [minutes, setMinutes] = useState('15')
-  const [error, setError] = useState<string | null>(null)
-  const [isStarting, setIsStarting] = useState(false)
+  const time = useTimeLimit()
+  const { start, error, isStarting } = useStart({ onStarted, onStale })
 
-  if (total === 0) {
-    return (
-      <div className="rounded-2xl border border-line bg-surface p-8 shadow-card">
-        <p>There are no questions for this section yet.</p>
-        <a
-          href={routeHref('question-bank')}
-          className="mt-3 inline-block rounded-md font-medium text-rose-deep underline"
-        >
-          Import questions in Question Bank Management
-        </a>
-      </div>
-    )
-  }
+  if (total === 0) return <EmptyBank message="There are no questions for this section yet." />
 
   const filter = { section, categoryIds, difficulties }
   const available = countAvailable(filter)
-  const number = wholeNumber(wanted)
-  const limit = wholeNumber(minutes)
-  const timeProblem =
-    isTimed && (limit < 1 || limit > MAX_MINUTES)
-      ? `Enter a number of minutes from 1 to ${MAX_MINUTES}.`
-      : null
+  const number = wholeNumber(wanted) ?? 0
   const problem =
     number < 1 || number > max
       ? `Enter a number from 1 to ${max}.`
@@ -73,38 +56,29 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
         ? `Only ${count(available, `matching ${unit}`)} available. Choose fewer, or widen your choices.`
         : null
 
-  function choose(filter: QuestionFilter, wantedCount: number): string[] | null {
+  function choose(): string[] | null {
     if (isByPassage) {
-      const chosen = choosePassages(index.questions, filter, wantedCount)
+      const chosen = choosePassages(index.questions, filter, number)
       return chosen.ok ? chosen.questionIds : null
     }
-    const chosen = chooseQuestions(index.questions, filter, wantedCount)
+    const chosen = chooseQuestions(index.questions, filter, number)
     return chosen.ok ? chosen.ids : null
   }
 
-  async function start() {
-    if (isStarting) return
-    const ids = choose(filter, number)
+  function submit() {
+    const ids = problem === null && time.problem === null ? choose() : null
     if (ids === null) return
-    setIsStarting(true)
-    setError(null)
-    try {
-      const config: SessionConfig = {
-        section,
-        category_ids: categoryIds,
-        difficulties,
-        question_count: ids.length,
-        explanations,
-        passage_count: isByPassage ? number : null,
-        time_limit_seconds: isTimed ? limit * 60 : null,
-        custom: null,
-      }
-      onStarted(await practiceSession.create(config, ids))
-    } catch (reason) {
-      setError(errorMessage(reason, 'The session could not be started.'))
-      setIsStarting(false)
-      onStale()
+    const config: SessionConfig = {
+      section,
+      category_ids: categoryIds,
+      difficulties,
+      question_count: ids.length,
+      explanations,
+      passage_count: isByPassage ? number : null,
+      time_limit_seconds: time.seconds,
+      custom: null,
     }
+    void start(config, ids)
   }
 
   function availableText() {
@@ -119,11 +93,10 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
       className="space-y-8 rounded-2xl border border-line bg-surface p-8 shadow-card"
       onSubmit={(event) => {
         event.preventDefault()
-        if (problem === null && timeProblem === null) void start()
+        submit()
       }}
     >
-      <fieldset>
-        <legend className="font-semibold">Categories</legend>
+      <Group legend="Categories">
         <p className="text-sm text-muted">
           Choose none to include all.
           {isByPassage && ' Counts are passages. A chosen passage keeps all of its questions.'}
@@ -138,134 +111,22 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
             />
           ))}
         </div>
-      </fieldset>
-      <fieldset>
-        <legend className="font-semibold">Difficulty</legend>
-        <p className="text-sm text-muted">Choose none to include all.</p>
-        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
-          {DIFFICULTIES.map((level) => (
-            <Check
-              key={level}
-              label={difficultyNames[level]}
-              checked={difficulties.includes(level)}
-              onChange={() => setDifficulties(toggle(difficulties, level))}
-            />
-          ))}
-        </div>
-      </fieldset>
-      <div>
-        <label className="font-semibold" htmlFor="question-count">
-          {label}
-        </label>
-        <div className="mt-2 flex flex-wrap items-center gap-4">
-          <input
-            id="question-count"
-            inputMode="numeric"
-            value={wanted}
-            onChange={(event) => setWanted(event.target.value)}
-            aria-describedby="question-count-help"
-            aria-invalid={problem !== null}
-            className="w-24 rounded-lg border border-line bg-surface px-3 py-2"
-          />
-          <span id="question-count-help" role="status" className="text-sm text-muted">
-            {problem ?? availableText()}
-          </span>
-        </div>
-      </div>
-      <fieldset>
-        <legend className="font-semibold">Time</legend>
-        <div className="mt-3 space-y-2">
-          <Check
-            type="radio"
-            name="timing"
-            label="Untimed"
-            checked={!isTimed}
-            onChange={() => setIsTimed(false)}
-          />
-          <Check
-            type="radio"
-            name="timing"
-            label="Timed"
-            checked={isTimed}
-            onChange={() => setIsTimed(true)}
-          />
-        </div>
-        {isTimed && (
-          <div className="mt-3 flex flex-wrap items-center gap-4">
-            <label htmlFor="minutes">Minutes</label>
-            <input
-              id="minutes"
-              inputMode="numeric"
-              value={minutes}
-              onChange={(event) => setMinutes(event.target.value)}
-              aria-describedby="minutes-help"
-              aria-invalid={timeProblem !== null}
-              className="w-24 rounded-lg border border-line bg-surface px-3 py-2"
-            />
-            <span id="minutes-help" role="status" className="text-sm text-muted">
-              {timeProblem ?? 'The timer pauses when you leave the session.'}
-            </span>
-          </div>
-        )}
-      </fieldset>
-      <fieldset>
-        <legend className="font-semibold">Explanations</legend>
-        <div className="mt-3 space-y-2">
-          <Check
-            type="radio"
-            name="explanations"
-            label="After each question (checking an answer locks it)"
-            checked={explanations === 'after_each'}
-            onChange={() => setExplanations('after_each')}
-          />
-          <Check
-            type="radio"
-            name="explanations"
-            label="At the end (answers can change until you finish)"
-            checked={explanations === 'at_end'}
-            onChange={() => setExplanations('at_end')}
-          />
-        </div>
-      </fieldset>
-      {error !== null && (
-        <p role="alert" className="rounded-lg border border-rose-accent bg-blush p-4">
-          {error}
-        </p>
-      )}
-      <Button type="submit" disabled={problem !== null || timeProblem !== null || isStarting}>
+      </Group>
+      <DifficultyFields value={difficulties} onChange={setDifficulties} />
+      <NumberField
+        id="question-count"
+        label={label}
+        value={wanted}
+        onChange={setWanted}
+        help={problem ?? availableText()}
+        isInvalid={problem !== null}
+      />
+      <TimeFields time={time} />
+      <ExplanationFields value={explanations} onChange={setExplanations} />
+      <StartError message={error} />
+      <Button type="submit" disabled={problem !== null || time.problem !== null || isStarting}>
         Start Practice
       </Button>
     </form>
-  )
-}
-
-function wholeNumber(text: string): number {
-  return /^\d+$/.test(text) ? Number(text) : 0
-}
-
-function toggle<T>(items: T[], item: T): T[] {
-  return items.includes(item) ? items.filter((other) => other !== item) : [...items, item]
-}
-
-interface CheckProps {
-  type?: 'checkbox' | 'radio'
-  name?: string
-  label: string
-  checked: boolean
-  onChange: () => void
-}
-
-function Check({ type = 'checkbox', name, label, checked, onChange }: CheckProps) {
-  return (
-    <label className="flex cursor-pointer items-start gap-3">
-      <input
-        type={type}
-        name={name}
-        checked={checked}
-        onChange={onChange}
-        className="mt-1 size-4 shrink-0 accent-rose-accent"
-      />
-      <span>{label}</span>
-    </label>
   )
 }

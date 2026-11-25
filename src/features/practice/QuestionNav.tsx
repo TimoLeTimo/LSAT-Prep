@@ -12,15 +12,15 @@ export function QuestionNav({ questions, position, onGoTo }: QuestionNavProps) {
   return (
     <nav aria-label="Questions">
       <div className="flex flex-wrap gap-x-6 gap-y-3">
-        {groupByPassage(questions).map(({ passageId, positions }, group) => (
+        {groupByPassage(questions).map(({ label, positions }, group) => (
           <div key={positions[0]}>
-            {passageId !== null && (
-              <p id={`passage-group-${group}`} className="mb-1 text-sm text-muted">
-                Passage {group + 1}
+            {label !== null && (
+              <p id={`question-group-${group}`} className="mb-1 text-sm text-muted">
+                {label}
               </p>
             )}
             <ol
-              aria-labelledby={passageId === null ? undefined : `passage-group-${group}`}
+              aria-labelledby={label === null ? undefined : `question-group-${group}`}
               className="flex flex-wrap gap-2"
             >
               {positions.map((index) => (
