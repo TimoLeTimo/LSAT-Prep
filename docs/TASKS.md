@@ -17,12 +17,12 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [x] Record exact setup/run commands in README.
 
 ## Milestone 1 — Visual shell
-- [ ] Define pink/rose design tokens.
-- [ ] Build app shell.
-- [ ] Build main menu with six navigation tiles.
-- [ ] Add placeholder screens and navigation.
-- [ ] Add settings entry point.
-- [ ] Check resizing and accessibility.
+- [x] Define pink/rose design tokens.
+- [x] Build app shell.
+- [x] Build main menu with six navigation tiles.
+- [x] Add placeholder screens and navigation.
+- [x] Add settings entry point.
+- [x] Check resizing and accessibility.
 
 ## Milestone 2 — Content and persistence
 - [ ] Define domain types.
