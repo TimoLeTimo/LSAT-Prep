@@ -3,18 +3,18 @@
 Update this file as milestones are completed. Keep tasks small enough to verify.
 
 ## Milestone 0 — Environment and skeleton
-- [ ] Inspect workspace for existing files before edits.
-- [ ] Confirm Linux distribution, version, and CPU architecture.
-- [ ] Confirm Node.js/npm versions and check Rust/Cargo plus Tauri prerequisites.
-- [ ] Confirm VS Code/Claude availability; install/configure only with approval.
-- [ ] Review and approve machine-specific dependency installation plan.
-- [ ] Initialize React + TypeScript + Vite.
-- [ ] Add Tailwind using the current supported Vite integration.
-- [ ] Add project README and .gitignore.
-- [ ] Run starter app locally and verify it in browser.
-- [ ] Review staged files for secrets/build artifacts.
-- [ ] Create Git repository and first commit after user review.
-- [ ] Record exact setup/run commands in README.
+- [x] Inspect workspace for existing files before edits.
+- [x] Confirm Linux distribution, version, and CPU architecture.
+- [x] Confirm Node.js/npm versions and check Rust/Cargo plus Tauri prerequisites.
+- [x] Confirm VS Code/Claude availability; install/configure only with approval.
+- [x] Review and approve machine-specific dependency installation plan.
+- [x] Initialize React + TypeScript + Vite.
+- [x] Add Tailwind using the current supported Vite integration.
+- [x] Add project README and .gitignore.
+- [x] Run starter app locally and verify it in browser.
+- [x] Review staged files for secrets/build artifacts.
+- [x] Create Git repository and first commit after user review.
+- [x] Record exact setup/run commands in README.
 
 ## Milestone 1 — Visual shell
 - [ ] Define pink/rose design tokens.
