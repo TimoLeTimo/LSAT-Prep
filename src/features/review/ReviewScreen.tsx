@@ -13,7 +13,7 @@ import { SessionScreen } from '../practice/SessionScreen'
 import { useStart } from '../practice/useStart'
 import { QuestionDetail } from './QuestionDetail'
 import { ReviewList } from './ReviewList'
-import type { ReviewFilter } from './reviewList'
+import type { ReviewFilter } from './reviewListUtils'
 
 export function ReviewScreen() {
   return (

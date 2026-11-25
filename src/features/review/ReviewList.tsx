@@ -6,7 +6,7 @@ import type { ReviewItem } from '../../data/records'
 import { sectionNames } from '../../domain/content/names'
 import type { Section } from '../../domain/content/types'
 import { StartError } from '../practice/fields'
-import { categoriesIn, filterItems, inTab, pageOf, reviewTabs, type ReviewFilter, type ReviewTab } from './reviewList'
+import { categoriesIn, filterItems, inTab, pageOf, reviewTabs, type ReviewFilter, type ReviewTab } from './reviewListUtils'
 
 const tabNames: Record<ReviewTab, string> = {
   missed: 'Missed',

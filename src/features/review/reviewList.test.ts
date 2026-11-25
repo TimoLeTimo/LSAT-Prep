@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ReviewItem } from '../../data/records'
-import { categoriesIn, filterItems, pageOf, type ReviewFilter } from './reviewList'
+import { categoriesIn, filterItems, pageOf, type ReviewFilter } from './reviewListUtils'
 
 const item = (question_id: string, changes: Partial<ReviewItem> = {}): ReviewItem => ({
   question_id, section: 'logical_reasoning', category_name: 'Flaw', difficulty: 2, passage_id: null,
