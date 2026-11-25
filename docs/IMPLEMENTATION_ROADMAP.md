@@ -30,6 +30,7 @@ Follow `START_HERE_FIRST_SESSION.md` and use its paste-ready Claude Code prompt.
 **Done when:** all navigation works and the design direction is consistent.
 
 ## Milestone 2 — Content model and question bank
+- Add the basic Tauri 2 desktop shell first; SQLite and the native file picker depend on it.
 - Define TypeScript types.
 - Implement SQLite persistence.
 - Create a small seed dataset of original test questions.
@@ -103,9 +104,8 @@ Follow `START_HERE_FIRST_SESSION.md` and use its paste-ready Claude Code prompt.
 **Done when:** core use does not require internet and user data is recoverable.
 
 ## Milestone 9 — Tauri packaging and macOS testing
-- Add Tauri 2 desktop shell.
 - Configure app metadata and icon.
-- Build/test on Linux as appropriate.
+- Build/test packaged output on Linux as appropriate.
 - Use the recipient's Mac for macOS build and installation testing.
 - Check target CPU architecture.
 - Sign and notarize if needed for smooth distribution.

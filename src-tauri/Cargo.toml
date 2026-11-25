@@ -1,0 +1,17 @@
+[package]
+name = "lsat-prep"
+version = "0.1.0"
+description = "Offline LSAT-style practice app"
+edition = "2024"
+rust-version = "1.90"
+publish = false
+
+[lib]
+name = "lsat_prep_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.6", features = [] }
+
+[dependencies]
+tauri = { version = "2.12.7", features = [] }

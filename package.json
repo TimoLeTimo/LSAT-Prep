@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "app": "env -u GTK_PATH -u GIO_MODULE_DIR tauri dev"
   },
   "dependencies": {
     "react": "^19.3.1",
@@ -15,6 +17,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.5",
+    "@tauri-apps/cli": "^2.12.6",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

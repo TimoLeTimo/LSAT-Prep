@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "No native permissions yet; add only what a feature needs.",
+  "windows": [
+    "main"
+  ],
+  "permissions": []
+}

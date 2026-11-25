@@ -25,6 +25,7 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [x] Check resizing and accessibility.
 
 ## Milestone 2 — Content and persistence
+- [x] Add basic Tauri 2 desktop shell and verify it on Linux (moved from Milestone 9).
 - [ ] Define domain types.
 - [ ] Finalize database schema.
 - [ ] Add SQLite access layer.
@@ -99,7 +100,6 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [ ] Keyboard/accessibility check.
 
 ## Milestone 9 — Mac delivery
-- [ ] Add Tauri desktop shell.
 - [ ] App icon and metadata.
 - [ ] Build on macOS.
 - [ ] Test on recipient's Mac.
