@@ -23,13 +23,18 @@ The exact tables are in `src-tauri/migrations/`; those files are authoritative. 
   - Shuffled answers are relabeled A–E on screen, and the order is saved in the snapshot. Attempts store the original choices. A question whose text mentions choices by letter or position is not shuffled.
   - A Reading Comprehension session is made of whole passages. Each has all of its available questions, in imported order, and at least one must match the chosen filters. Both TypeScript and Rust enforce this.
   - A flag lasts for its session. A bookmark belongs to the question and can also change while reviewing a finished session.
+- Exams (`src-tauri/src/practice/exam.rs`) add `exam_sections`, and `exam_section` and `is_scored` on each session question. Formats are described in `EXAM_FORMATS.md`.
+  - Sections are taken in order and cannot be reopened. The interface receives only the active section's questions, and learns which are unscored only when the exam is completed.
+  - Answers are submitted together when the last section ends. Ending an exam early submits nothing.
+  - A full simulation's clock uses wall time, so it runs while the app is closed or asleep, and its breaks cannot be skipped. A test's clock pauses when the user leaves.
+  - After a break, the next section waits for the user to start it.
+  - One exam can be unfinished at a time, separate from practice.
 - Templates (`src-tauri/src/templates.rs`) hold choices only, never questions. Names are unique ignoring capitals, up to 60 characters, with at most 50 templates. Each chosen category keeps its section and name, so one that is later unavailable can be explained. A template whose choices cannot be read stays listed and can be renamed or deleted.
 - Content with history or bookmarks cannot be deleted. Retire it instead.
 - The session clock runs in Rust (`practice/clock.rs`) while the practice screen is open, and `active_ms` stores the time it has run.
   - It pauses when the user leaves the screen or closes the app, but not when the window is hidden. It relies on a system clock that should stop during sleep.
   - It is saved every 5 seconds, with each answer, and on a normal close. An abrupt quit can give back up to about 5 seconds.
   - At the limit, saved answers are submitted and the session ends in one transaction. Later answers are refused.
-  - Practice-test simulations (Milestone 6) may need different pause rules and section timers.
 
 ## 1. Core content tables
 

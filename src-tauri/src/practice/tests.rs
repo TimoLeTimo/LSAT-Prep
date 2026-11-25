@@ -40,6 +40,7 @@ fn config(explanations: Explanations, question_count: usize) -> Config {
     passage_count: None,
     time_limit_seconds: None,
     custom: None,
+    exam: None,
   }
 }
 
@@ -52,14 +53,14 @@ fn start(conn: &mut Connection, explanations: Explanations) -> Session {
   create(conn, &config(explanations, 3), &ids(&[3, 1, 2])).unwrap()
 }
 
-fn refusal<T: fmt::Debug>(result: Result<T>) -> &'static str {
+pub(super) fn refusal<T: fmt::Debug>(result: Result<T>) -> &'static str {
   match result {
     Err(PracticeError::Refused(reason)) => reason,
     other => panic!("expected a refusal, got {other:?}"),
   }
 }
 
-fn attempts(conn: &Connection) -> Vec<(String, bool, i64)> {
+pub(super) fn attempts(conn: &Connection) -> Vec<(String, bool, i64)> {
   conn
     .prepare("SELECT selected_choice_id, is_correct, time_spent_seconds FROM attempts ORDER BY rowid")
     .unwrap()
@@ -853,7 +854,7 @@ fn a_passage_survives_recovery_exactly_as_shown() {
 // ---------------------------------------------------------------- Custom sessions
 
 /// TEST DATA ONLY: LR q1-q4 (keys C) and RC z, a, m on p1 and b, c on p2 (keys C).
-fn mixed_database(dir: &TempDir) -> Connection {
+pub(super) fn mixed_database(dir: &TempDir) -> Connection {
   let mut conn = rc_database(dir);
   let mut package: Value =
     serde_json::from_str(include_str!("../../../tests/fixtures/valid-package.json")).unwrap();
@@ -905,7 +906,7 @@ fn with(mut config: Config, change: impl Fn(&mut Custom)) -> Config {
   config
 }
 
-fn words(ids: &str) -> Vec<String> {
+pub(super) fn words(ids: &str) -> Vec<String> {
   ids.split_whitespace().map(String::from).collect()
 }
 

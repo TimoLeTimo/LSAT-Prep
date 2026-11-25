@@ -57,6 +57,22 @@ impl Custom {
   }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExamKind {
+  /// Chosen sections. The clock pauses when the user leaves.
+  Test,
+  /// The full exam. The clock keeps running.
+  FullSimulation,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExamConfig {
+  pub kind: ExamKind,
+  pub name: String,
+}
+
 /// The choices that created the session. Saved with it and never changed.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -78,9 +94,36 @@ pub struct Config {
   /// Null or missing means a targeted session.
   #[serde(default)]
   pub custom: Option<Custom>,
+  /// Null or missing means practice.
+  #[serde(default)]
+  pub exam: Option<ExamConfig>,
 }
 
 impl Config {
+  /// An exam's sections, with their own times, are stored separately.
+  pub fn exam(exam: ExamConfig, question_count: usize) -> Self {
+    Config {
+      section: None,
+      category_ids: vec![],
+      difficulties: vec![],
+      question_count,
+      explanations: Explanations::AtEnd,
+      passage_count: None,
+      time_limit_seconds: None,
+      custom: None,
+      exam: Some(exam),
+    }
+  }
+
+  pub fn session_type(&self) -> &'static str {
+    match (&self.exam, &self.custom) {
+      (Some(ExamConfig { kind: ExamKind::Test, .. }), _) => "test",
+      (Some(ExamConfig { kind: ExamKind::FullSimulation, .. }), _) => "full_simulation",
+      (None, Some(_)) => "custom",
+      (None, None) => "targeted",
+    }
+  }
+
   /// Whether a question matches the given categories and the chosen difficulties.
   pub fn matches(&self, category_ids: &[&String], question: &Question) -> bool {
     (category_ids.is_empty() || category_ids.contains(&&question.primary_category))
@@ -158,6 +201,12 @@ pub struct SessionQuestion {
   pub is_bookmarked: bool,
   pub time_spent_seconds: i64,
   pub is_submitted: bool,
+  /// Position in the whole session.
+  pub display_order: i64,
+  /// Exams only.
+  pub exam_section: Option<i64>,
+  /// Null until an exam is completed, and outside exams.
+  pub is_scored: Option<bool>,
   /// Null until the answer is submitted or the session is completed.
   pub outcome: Option<Outcome>,
 }
@@ -221,6 +270,9 @@ impl SessionQuestion {
       is_bookmarked,
       time_spent_seconds,
       is_submitted,
+      display_order: 0,
+      exam_section: None,
+      is_scored: None,
       outcome,
     }
   }

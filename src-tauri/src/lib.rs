@@ -9,7 +9,7 @@ use std::sync::Mutex;
 
 use tauri::{Builder, Manager, RunEvent, Runtime};
 
-use commands::{CurrentImport, Database, SessionClock};
+use commands::{CurrentImport, Database, ExamTimer, SessionClock};
 
 /// Everything the real app and the command tests share.
 fn configure<R: Runtime>(builder: Builder<R>) -> Builder<R> {
@@ -17,6 +17,7 @@ fn configure<R: Runtime>(builder: Builder<R>) -> Builder<R> {
     .plugin(tauri_plugin_dialog::init())
     .manage(CurrentImport::default())
     .manage(SessionClock::default())
+    .manage(ExamTimer::default())
     .invoke_handler(tauri::generate_handler![
       commands::database_status,
       commands::question_index,
@@ -47,6 +48,13 @@ fn configure<R: Runtime>(builder: Builder<R>) -> Builder<R> {
       commands::update_template,
       commands::rename_template,
       commands::delete_template,
+      commands::create_exam,
+      commands::unfinished_exam,
+      commands::open_exam,
+      commands::save_exam,
+      commands::leave_exam,
+      commands::start_exam_section,
+      commands::end_exam_section,
     ])
 }
 

@@ -14,7 +14,10 @@ use crate::{
   bank::{self, QuestionIndex},
   db::DbError,
   import::{self, Catalog, Entry, Plan, Session, package::{Label, Section}},
-  practice::{self, Clock, Config, Reading},
+  practice::{
+    self, Clock, Config, ExamKind, Reading,
+    exam::{self, Exam, ExamClock, NewSection, Now},
+  },
   templates::{self, Choices, Template},
 };
 
@@ -34,6 +37,10 @@ pub struct CurrentImport(pub Mutex<Session>);
 /// The practice clock. When both are needed, lock this before the database.
 #[derive(Default)]
 pub struct SessionClock(Mutex<Clock>);
+
+/// The exam clock. When both are needed, lock this before the database.
+#[derive(Default)]
+pub struct ExamTimer(Mutex<ExamClock>);
 
 fn lock<T>(mutex: &Mutex<T>) -> Result<MutexGuard<'_, T>, String> {
   mutex.lock().map_err(|_| "Something went wrong. Close LSAT Prep and open it again.".into())
@@ -163,9 +170,10 @@ pub fn select_answer(
   id: String,
   choice: Option<Label>,
   clock: State<SessionClock>,
+  exam: State<ExamTimer>,
   database: State<Database>,
 ) -> Result<(), String> {
-  require_time(&clock, &database, &id)?;
+  require_time(&clock, &exam, &database, &id)?;
   practice::select(&mut *database.get()?, &id, choice).map_err(text)
 }
 
@@ -205,9 +213,10 @@ pub fn set_session_position(
 pub fn submit_answer(
   id: String,
   clock: State<SessionClock>,
+  exam: State<ExamTimer>,
   database: State<Database>,
 ) -> Result<practice::Session, String> {
-  require_time(&clock, &database, &id)?;
+  require_time(&clock, &exam, &database, &id)?;
   practice::submit(&mut *database.get()?, &id).map_err(text)
 }
 
@@ -254,6 +263,77 @@ pub fn pause_clock(
   lock(&clock.0)?.pause(&mut *database.get()?, &session_id, Instant::now()).map_err(text)
 }
 
+// ---------------------------------------------------------------- Exams
+
+#[tauri::command(async)]
+pub fn create_exam(
+  kind: ExamKind,
+  name: String,
+  sections: Vec<NewSection>,
+  exam: State<ExamTimer>,
+  database: State<Database>,
+) -> Result<Exam, String> {
+  let mut exam = lock(&exam.0)?;
+  let mut conn = database.get()?;
+  let id = exam::create(&mut conn, kind, &name, &sections).map_err(text)?;
+  exam.save(&mut conn, &id, Now::get()).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn unfinished_exam(
+  exam: State<ExamTimer>,
+  database: State<Database>,
+) -> Result<Option<Exam>, String> {
+  lock(&exam.0)?.unfinished(&mut *database.get()?, Now::get()).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn open_exam(
+  session_id: String,
+  exam: State<ExamTimer>,
+  database: State<Database>,
+) -> Result<Exam, String> {
+  lock(&exam.0)?.open(&mut *database.get()?, &session_id, Now::get()).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn save_exam(
+  session_id: String,
+  exam: State<ExamTimer>,
+  database: State<Database>,
+) -> Result<Exam, String> {
+  lock(&exam.0)?.save(&mut *database.get()?, &session_id, Now::get()).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn leave_exam(
+  session_id: String,
+  exam: State<ExamTimer>,
+  database: State<Database>,
+) -> Result<(), String> {
+  lock(&exam.0)?.leave(&mut *database.get()?, &session_id, Now::get()).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn start_exam_section(
+  session_id: String,
+  exam: State<ExamTimer>,
+  database: State<Database>,
+) -> Result<Exam, String> {
+  lock(&exam.0)?.start_section(&mut *database.get()?, &session_id, Now::get()).map_err(text)
+}
+
+#[tauri::command(async)]
+pub fn end_exam_section(
+  session_id: String,
+  position: i64,
+  exam: State<ExamTimer>,
+  database: State<Database>,
+) -> Result<Exam, String> {
+  let mut exam = lock(&exam.0)?;
+  exam.end_section(&mut *database.get()?, &session_id, position, Now::get()).map_err(text)
+}
+
 // ---------------------------------------------------------------- Templates
 
 #[tauri::command(async)]
@@ -290,7 +370,17 @@ pub fn delete_template(id: String, database: State<Database>) -> Result<(), Stri
 }
 
 /// Refuses an answer when time is up or the timer is paused.
-fn require_time(clock: &SessionClock, database: &Database, question: &str) -> Result<(), String> {
+fn require_time(
+  clock: &SessionClock,
+  exam: &ExamTimer,
+  database: &Database,
+  question: &str,
+) -> Result<(), String> {
+  let in_exam = practice::is_exam_question(&*database.get()?, question).map_err(text)?;
+  if in_exam {
+    let mut exam = lock(&exam.0)?;
+    return exam.require_time(&mut *database.get()?, question, Now::get()).map_err(text);
+  }
   let mut clock = lock(&clock.0)?;
   let mut conn = database.get()?;
   let session_id = practice::session_of(&conn, question).map_err(text)?;
@@ -302,6 +392,10 @@ pub fn save_clock_before_exit<R: Runtime>(app: &AppHandle<R>) {
   let (clock, database) = (app.state::<SessionClock>(), app.state::<Database>());
   if let (Ok(mut clock), Ok(mut conn)) = (lock(&clock.0), database.get()) {
     let _ = clock.pause_any(&mut conn, Instant::now());
+  }
+  let exam = app.state::<ExamTimer>();
+  if let (Ok(mut exam), Ok(mut conn)) = (lock(&exam.0), database.get()) {
+    let _ = exam.leave_any(&mut conn, Now::get());
   }
 }
 
@@ -560,6 +654,64 @@ mod tests {
     assert_eq!(call("list_templates", json!({})).unwrap()[0]["name"], "Two");
     call("delete_template", json!({ "id": id })).unwrap();
     assert_eq!(call("list_templates", json!({})), Ok(json!([])));
+  }
+
+  #[test]
+  fn the_interface_can_complete_an_exam() {
+    let dir = TempDir::new();
+    let mut conn = db::open(&dir.0).unwrap();
+    let path = dir.0.join("package.json");
+    std::fs::write(&path, VALID).unwrap();
+    let mut import = Session::default();
+    import.choose(&conn, &path).unwrap();
+    import.preview(&mut conn).unwrap();
+    import.confirm(&mut conn).unwrap();
+    let app = app(Ok(conn));
+    let window = window(&app);
+    let call = |command: &str, body: Value| call(&window, command, body);
+    let section = |kind: &str, id: &str, rest: i64, unscored: Value| {
+      json!({ "section": kind, "time_limit_seconds": 60, "break_after_seconds": rest,
+        "question_ids": [id], "unscored_ids": unscored })
+    };
+    let body = json!({ "kind": "test", "name": "Mini", "sections": [
+      section("logical_reasoning", "test-lr-1", 60, json!([])),
+      section("reading_comprehension", "test-rc-1", 0, json!(["test-rc-1"])),
+    ]});
+    let exam = call("create_exam", body.clone()).unwrap();
+    assert!(call("create_exam", body).is_err());
+    assert_eq!(exam["phase"], json!({ "name": "ready", "position": 0 }));
+    assert_eq!(exam["session"]["questions"], json!([]));
+    let id = json!({ "sessionId": exam["session"]["id"] });
+    let first = call("start_exam_section", id.clone()).unwrap();
+    let question = first["session"]["questions"][0]["id"].clone();
+    let answer = json!({ "id": question, "choice": "C" });
+    call("select_answer", answer.clone()).unwrap();
+    call("flag_question", json!({ "id": question, "flagged": true })).unwrap();
+    // Practice commands cannot get around the exam's rules.
+    assert!(call("submit_answer", json!({ "id": question })).is_err());
+    assert!(call("finish_session", id.clone()).is_err());
+    assert!(call("start_clock", id.clone()).is_err());
+    let hidden = call("practice_session", id.clone()).unwrap().to_string();
+    assert!(!hidden.contains("test-rc-1") && !hidden.contains("correct_choice\":"));
+
+    call("leave_exam", id.clone()).unwrap();
+    assert!(call("select_answer", answer.clone()).unwrap_err().to_string().contains("paused"));
+    assert_eq!(call("unfinished_exam", json!({})).unwrap()["phase"]["name"], "section");
+    call("open_exam", id.clone()).unwrap();
+    call("select_answer", answer.clone()).unwrap();
+    let mut end = id.clone();
+    end["position"] = json!(0);
+    assert_eq!(call("end_exam_section", end.clone()).unwrap()["phase"]["name"], "break");
+    assert!(call("select_answer", answer).is_err());
+    call("start_exam_section", id.clone()).unwrap();
+    assert_eq!(call("save_exam", id.clone()).unwrap()["phase"]["name"], "section");
+    end["position"] = json!(1);
+    let done = call("end_exam_section", end).unwrap();
+    assert_eq!(done["phase"]["name"], "ended");
+    let questions = &done["session"]["questions"];
+    assert_eq!(questions[0]["outcome"]["is_correct"], true);
+    assert_eq!((&questions[0]["is_scored"], &questions[1]["is_scored"]), (&json!(true), &json!(false)));
+    assert_eq!(call("unfinished_exam", json!({})), Ok(Value::Null));
   }
 
   #[test]

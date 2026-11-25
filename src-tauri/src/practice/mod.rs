@@ -2,8 +2,11 @@
 //! or a crash loses nothing that was confirmed.
 
 mod clock;
+pub mod exam;
 mod letters;
 mod model;
+#[cfg(test)]
+mod exam_tests;
 #[cfg(test)]
 mod tests;
 
@@ -90,24 +93,15 @@ pub fn create(conn: &mut Connection, config: &Config, question_ids: &[String]) -
   if config.time_limit_seconds.is_some_and(|limit| !TIME_LIMIT_SECONDS.contains(&limit)) {
     return Err(PracticeError::Refused("Choose a time limit from 1 to 360 minutes."));
   }
+  if config.exam.is_some() {
+    return Err(MISFIT);
+  }
 
   let tx = begin(conn)?;
   if unfinished_id(&tx, config.section)?.is_some() {
     return Err(PracticeError::Refused("Finish or end your current session first."));
   }
-  let id = new_id(&tx)?;
-  let time = now(&tx)?;
-  tx.execute(
-    "INSERT INTO practice_sessions (id, session_type, configuration_json, status, started_at,
-       created_at, time_limit_seconds) VALUES (?1, ?5, ?2, 'in_progress', ?3, ?3, ?4)",
-    params![
-      id,
-      to_json(config)?,
-      time,
-      config.time_limit_seconds,
-      if config.custom.is_some() { "custom" } else { "targeted" }
-    ],
-  )?;
+  let id = insert_session(&tx, config)?;
   let mut snapshots = question_ids
     .iter()
     .map(|question_id| take_snapshot(&tx, question_id))
@@ -120,16 +114,38 @@ pub fn create(conn: &mut Connection, config: &Config, question_ids: &[String]) -
       }
     }
   }
-  for (position, (question_id, snapshot)) in question_ids.iter().zip(&snapshots).enumerate() {
-    tx.prepare_cached(
-      "INSERT INTO session_questions (id, session_id, question_id, display_order,
-         content_snapshot_json) VALUES (?1, ?2, ?3, ?4, ?5)",
-    )?
-    .execute(params![new_id(&tx)?, id, question_id, position as i64, to_json(snapshot)?])?;
+  for (position, snapshot) in snapshots.iter().enumerate() {
+    insert_question(&tx, &id, snapshot, position)?;
   }
   let session = load(&tx, &id)?;
   tx.commit()?;
   Ok(session)
+}
+
+fn insert_session(conn: &Connection, config: &Config) -> Result<String> {
+  let id = new_id(conn)?;
+  conn.execute(
+    "INSERT INTO practice_sessions (id, session_type, configuration_json, status, started_at,
+       created_at, time_limit_seconds) VALUES (?1, ?2, ?3, 'in_progress', ?4, ?4, ?5)",
+    params![id, config.session_type(), to_json(config)?, now(conn)?, config.time_limit_seconds],
+  )?;
+  Ok(id)
+}
+
+fn insert_question(
+  conn: &Connection,
+  session_id: &str,
+  snapshot: &Snapshot,
+  position: usize,
+) -> Result<String> {
+  let id = new_id(conn)?;
+  conn
+    .prepare_cached(
+      "INSERT INTO session_questions (id, session_id, question_id, display_order,
+         content_snapshot_json) VALUES (?1, ?2, ?3, ?4, ?5)",
+    )?
+    .execute(params![id, session_id, snapshot.question.id, position as i64, to_json(snapshot)?])?;
+  Ok(id)
 }
 
 const UNAVAILABLE: PracticeError =
@@ -305,14 +321,20 @@ pub fn load(conn: &Connection, id: &str) -> Result<Session> {
     .prepare_cached(
       "SELECT s.id, s.content_snapshot_json, s.selected_choice_id, s.is_flagged,
          s.time_spent_seconds, a.is_correct,
-         EXISTS (SELECT 1 FROM bookmarks b WHERE b.question_id = s.question_id)
+         EXISTS (SELECT 1 FROM bookmarks b WHERE b.question_id = s.question_id),
+         s.display_order, s.exam_section, s.is_scored
        FROM session_questions s LEFT JOIN attempts a ON a.session_question_id = s.id
-       WHERE s.session_id = ?1 ORDER BY s.display_order",
+       WHERE s.session_id = ?1
+         -- An exam in progress shows only its active section.
+         AND (s.exam_section IS NULL OR ?2 OR EXISTS (SELECT 1 FROM exam_sections e
+           WHERE e.session_id = s.session_id AND e.position = s.exam_section
+             AND e.status = 'active'))
+       ORDER BY s.display_order",
     )?
-    .query_map([id], |row| {
+    .query_map(params![id, status != Status::InProgress], |row| {
       let snapshot: Snapshot = from_json(row, 1)?;
       let selected: Option<String> = row.get(2)?;
-      Ok(SessionQuestion::new(
+      let mut question = SessionQuestion::new(
         row.get(0)?,
         snapshot,
         selected,
@@ -321,7 +343,13 @@ pub fn load(conn: &Connection, id: &str) -> Result<Session> {
         row.get(5)?,
         row.get(6)?,
         status,
-      ))
+      );
+      question.display_order = row.get(7)?;
+      question.exam_section = row.get(8)?;
+      if question.exam_section.is_some() && status == Status::Completed {
+        question.is_scored = row.get(9)?;
+      }
+      Ok(question)
     })?
     .collect::<rusqlite::Result<_>>()?;
   Ok(Session {
@@ -367,7 +395,20 @@ fn active_question(conn: &Connection, id: &str) -> Result<Stored> {
     )
     .optional()?
     .ok_or(NOT_FOUND)?;
-  if status == Status::InProgress { Ok(stored) } else { Err(ENDED) }
+  if status != Status::InProgress {
+    return Err(ENDED);
+  }
+  let in_closed_section: bool = conn.query_row(
+    "SELECT EXISTS (SELECT 1 FROM session_questions s JOIN exam_sections e
+       ON e.session_id = s.session_id AND e.position = s.exam_section
+     WHERE s.id = ?1 AND e.status <> 'active')",
+    [id],
+    |row| row.get(0),
+  )?;
+  if in_closed_section {
+    return Err(PracticeError::Refused("This section is not in progress."));
+  }
+  Ok(stored)
 }
 
 fn require_active(conn: &Connection, session_id: &str) -> Result<()> {
@@ -384,6 +425,16 @@ fn require_active(conn: &Connection, session_id: &str) -> Result<()> {
 pub fn session_of(conn: &Connection, id: &str) -> Result<String> {
   conn
     .query_row("SELECT session_id FROM session_questions WHERE id = ?1", [id], |row| row.get(0))
+    .optional()?
+    .ok_or(NOT_FOUND)
+}
+
+/// Whether a session question belongs to an exam, which has its own clock.
+pub fn is_exam_question(conn: &Connection, id: &str) -> Result<bool> {
+  conn
+    .query_row("SELECT exam_section IS NOT NULL FROM session_questions WHERE id = ?1", [id], |row| {
+      row.get(0)
+    })
     .optional()?
     .ok_or(NOT_FOUND)
 }
@@ -459,7 +510,10 @@ pub fn set_position(conn: &mut Connection, session_id: &str, position: i64) -> R
   require_active(&tx, session_id)?;
   let changed = tx.execute(
     "UPDATE practice_sessions SET current_position = ?2 WHERE id = ?1 AND EXISTS
-       (SELECT 1 FROM session_questions WHERE session_id = ?1 AND display_order = ?2)",
+       (SELECT 1 FROM session_questions s WHERE session_id = ?1 AND display_order = ?2
+          AND (s.exam_section IS NULL OR EXISTS (SELECT 1 FROM exam_sections e
+            WHERE e.session_id = s.session_id AND e.position = s.exam_section
+              AND e.status = 'active')))",
     params![session_id, position],
   )?;
   if changed == 0 {
@@ -489,6 +543,9 @@ pub fn submit(conn: &mut Connection, id: &str) -> Result<Session> {
 /// Ends the session and submits every selected answer. Unanswered questions get no attempt.
 pub fn finish(conn: &mut Connection, session_id: &str) -> Result<Session> {
   let tx = begin(conn)?;
+  if load(&tx, session_id)?.config.exam.is_some() {
+    return Err(PracticeError::Refused("End each section of the exam instead."));
+  }
   let session = finish_in(&tx, session_id)?;
   tx.commit()?;
   Ok(session)

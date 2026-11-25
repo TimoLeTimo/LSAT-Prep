@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-unfinished-exam"
+description = "Enables the unfinished_exam command without any pre-configured scope."
+commands.allow = ["unfinished_exam"]
+
+[[permission]]
+identifier = "deny-unfinished-exam"
+description = "Denies the unfinished_exam command without any pre-configured scope."
+commands.deny = ["unfinished_exam"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-end-exam-section"
+description = "Enables the end_exam_section command without any pre-configured scope."
+commands.allow = ["end_exam_section"]
+
+[[permission]]
+identifier = "deny-end-exam-section"
+description = "Denies the end_exam_section command without any pre-configured scope."
+commands.deny = ["end_exam_section"]

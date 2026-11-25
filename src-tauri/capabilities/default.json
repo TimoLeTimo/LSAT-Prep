@@ -34,6 +34,13 @@
     "allow-create-template",
     "allow-update-template",
     "allow-rename-template",
-    "allow-delete-template"
+    "allow-delete-template",
+    "allow-create-exam",
+    "allow-unfinished-exam",
+    "allow-open-exam",
+    "allow-save-exam",
+    "allow-leave-exam",
+    "allow-start-exam-section",
+    "allow-end-exam-section"
   ]
 }

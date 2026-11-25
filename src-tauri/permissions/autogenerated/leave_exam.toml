@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-leave-exam"
+description = "Enables the leave_exam command without any pre-configured scope."
+commands.allow = ["leave_exam"]
+
+[[permission]]
+identifier = "deny-leave-exam"
+description = "Denies the leave_exam command without any pre-configured scope."
+commands.deny = ["leave_exam"]

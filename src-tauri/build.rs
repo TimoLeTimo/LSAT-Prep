@@ -30,6 +30,13 @@ fn main() {
     "update_template",
     "rename_template",
     "delete_template",
+    "create_exam",
+    "unfinished_exam",
+    "open_exam",
+    "save_exam",
+    "leave_exam",
+    "start_exam_section",
+    "end_exam_section",
   ]);
   tauri_build::try_build(tauri_build::Attributes::new().app_manifest(commands))
     .expect("failed to prepare the Tauri build");

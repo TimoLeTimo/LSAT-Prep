@@ -48,6 +48,9 @@ impl Clock {
       self.stop(id);
       return Ok(Reading { remaining_ms: None, ended: Some(session) });
     }
+    if session.config.exam.is_some() {
+      return Err(PracticeError::Refused("An exam has its own timer."));
+    }
     let elapsed = match &self.0 {
       Some(running) if running.session_id == id => now.saturating_duration_since(running.saved_until),
       _ => Duration::ZERO,
