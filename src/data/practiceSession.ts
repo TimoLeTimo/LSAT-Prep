@@ -14,6 +14,8 @@ export interface CustomOptions {
   shuffle_answers: boolean
 }
 
+export type ExamKind = 'test' | 'full_simulation'
+
 export interface SessionConfig {
   /** Null for custom sessions, which can mix sections. */
   section: Section | null
@@ -29,6 +31,8 @@ export interface SessionConfig {
   time_limit_seconds: number | null
   /** Null for a targeted session. */
   custom: CustomOptions | null
+  /** Missing or null for practice. */
+  exam?: { kind: ExamKind; name: string } | null
 }
 
 export interface Outcome {
@@ -54,6 +58,12 @@ export interface SessionQuestion {
   is_bookmarked: boolean
   time_spent_seconds: number
   is_submitted: boolean
+  /** Position in the whole session. */
+  display_order: number
+  /** Exams only. */
+  exam_section: number | null
+  /** Null until an exam is completed, and outside exams. */
+  is_scored: boolean | null
   outcome: Outcome | null
 }
 

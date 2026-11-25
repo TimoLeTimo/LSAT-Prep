@@ -453,3 +453,21 @@ it('a double click on a bookmark ends where it began', async () => {
   expect(test.state.session.questions[0].is_bookmarked).toBe(false)
   expect(test.api.bookmark).toHaveBeenLastCalledWith('question-a', false)
 })
+
+it('locks answers and shows the error when saving fails as time runs out', async () => {
+  const test = setup()
+  test.controller.startClock()
+  test.controller.select('A')
+  await tick()
+  test.time.now = 60_000
+  test.controller.select('B')
+  test.controller.toggleFlag()
+  expect(test.controller.current).toMatchObject({ selected: 'A', is_flagged: false })
+  test.api.saveClock.mockRejectedValueOnce('Disk full.')
+  await test.controller.saveClock()
+  expect(test.state.error?.message).toBe('Disk full.')
+  test.api.saveClock.mockResolvedValueOnce({ remaining_ms: 0, ended: completed() })
+  test.state.error!.retry()
+  await tick()
+  expect(test.state).toMatchObject({ error: null, session: { status: 'completed' } })
+})

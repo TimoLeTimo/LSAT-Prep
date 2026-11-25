@@ -17,6 +17,9 @@ export function testSessionQuestion(id: string): SessionQuestion {
     is_bookmarked: false,
     time_spent_seconds: 0,
     is_submitted: false,
+    display_order: 0,
+    exam_section: null,
+    is_scored: null,
     outcome: null,
   }
 }

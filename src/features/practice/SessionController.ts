@@ -2,7 +2,7 @@ import { errorMessage } from '../../data/errorMessage'
 import type { ClockReading, PracticeSessionApi, Session, SessionQuestion } from '../../data/practiceSession'
 import type { ChoiceLabel } from '../../domain/content/types'
 
-type Api = Pick<
+export type SessionApi = Pick<
   PracticeSessionApi,
   | 'select'
   | 'flag'
@@ -50,11 +50,11 @@ export class SessionController {
   private readonly unsavedTime = new Map<string, number>()
   private readonly beforeSubmit = new Set<() => void>()
 
-  private readonly api: Api
+  private readonly api: SessionApi
   private readonly now: () => number
   private isClockWanted = false
 
-  constructor(api: Api, session: Session, now: () => number = () => performance.now()) {
+  constructor(api: SessionApi, session: Session, now: () => number = () => performance.now()) {
     this.api = api
     this.now = now
     this.state = {
@@ -181,13 +181,15 @@ export class SessionController {
 
   /**
    * Saves the clock, after any answers already waiting. The backend decides when time is
-   * up; a failure is tried again at the next save.
+   * up. A failure is tried again at the next save, and shown only if time seems to be up.
    */
   readonly saveClock = (): Promise<void> =>
     this.enqueue(async () => {
       if (!this.isClockWanted || !this.isActive || this.state.clock === null) return
       this.readClock(await this.api.saveClock(this.state.session.id))
-    }).catch(() => {})
+    }).catch((error) => {
+      if (this.isTimeUp) this.fail(error, () => void this.saveClock())
+    })
 
   /** Pauses once everything already waiting is saved. */
   readonly pauseClock = (): Promise<void> => {
@@ -210,8 +212,13 @@ export class SessionController {
     return this.state.session.status === 'in_progress'
   }
 
+  /** As far as the screen knows. Answers wait until the backend confirms it. */
+  private get isTimeUp() {
+    return this.getRemainingMs() === 0
+  }
+
   private get canChange() {
-    return !this.state.isSubmitting && this.isActive
+    return !this.state.isSubmitting && this.isActive && !this.isTimeUp
   }
 
   private readClock({ remaining_ms, ended }: ClockReading) {

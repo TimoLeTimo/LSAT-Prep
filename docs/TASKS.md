@@ -81,11 +81,11 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [ ] Availability validation. (Built; real-window check remains.)
 
 ## Milestone 6 — Practice tests
-- [x] Exam formats as data, exam assembly, and the section engine (no screens yet).
-- [ ] Custom section tests.
+- [x] Exam formats as data, exam assembly, and the section engine.
+- [ ] Custom section tests. (Built; real-window check remains.)
 - [ ] Full exam configuration.
-- [ ] Section timers.
-- [ ] Flagging and navigation.
+- [ ] Section timers. (Built; real-window check remains.)
+- [ ] Flagging and navigation. (Built; real-window check remains.)
 - [ ] Break handling.
 - [ ] Results screen.
 - [ ] Post-test review.
