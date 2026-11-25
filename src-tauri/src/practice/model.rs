@@ -23,15 +23,18 @@ pub struct Config {
   pub difficulties: Vec<i64>,
   pub question_count: usize,
   pub explanations: Explanations,
+  /// RC only: how many whole passage sets the session has.
+  #[serde(default)]
+  pub passage_count: Option<usize>,
   /// Null or missing means untimed.
   #[serde(default)]
   pub time_limit_seconds: Option<i64>,
 }
 
 impl Config {
-  pub fn accepts(&self, question: &Question) -> bool {
-    question.section == self.section
-      && (self.category_ids.is_empty() || self.category_ids.contains(&question.primary_category))
+  /// Whether a question matches the chosen categories and difficulties.
+  pub fn matches(&self, question: &Question) -> bool {
+    (self.category_ids.is_empty() || self.category_ids.contains(&question.primary_category))
       && (self.difficulties.is_empty() || self.difficulties.contains(&question.difficulty))
   }
 }
@@ -55,6 +58,7 @@ pub struct Snapshot {
 
 #[derive(Serialize, Debug, PartialEq)]
 pub struct PassageView {
+  id: String,
   title: String,
   texts: Vec<LabeledText>,
 }
@@ -119,7 +123,11 @@ impl SessionQuestion {
       stimulus: question.stimulus,
       prompt: question.prompt,
       choices: question.choices,
-      passage: passage.map(|passage| PassageView { title: passage.title, texts: passage.texts }),
+      passage: passage.map(|passage| PassageView {
+        id: passage.id,
+        title: passage.title,
+        texts: passage.texts,
+      }),
       selected,
       is_flagged,
       is_bookmarked,

@@ -76,6 +76,7 @@ export function SessionSetup({ section, index, onStarted, onStale }: SessionSetu
         difficulties,
         question_count: number,
         explanations,
+        passage_count: null,
         time_limit_seconds: isTimed ? limit * 60 : null,
       }
       onStarted(await practiceSession.create(config, chosen.ids))

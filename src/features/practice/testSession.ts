@@ -30,6 +30,7 @@ export function testSession(ids = ['a', 'b', 'c']): Session {
       difficulties: [],
       question_count: ids.length,
       explanations: 'after_each',
+      passage_count: null,
       time_limit_seconds: null,
     },
     status: 'in_progress',

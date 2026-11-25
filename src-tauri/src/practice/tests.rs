@@ -37,6 +37,7 @@ fn config(explanations: Explanations, question_count: usize) -> Config {
     difficulties: vec![],
     question_count,
     explanations,
+    passage_count: None,
     time_limit_seconds: None,
   }
 }
@@ -131,7 +132,11 @@ fn refuses_a_question_whose_passage_is_retired() {
   let dir = TempDir::new();
   let mut conn = database(&dir);
   conn.execute("UPDATE passages SET status = 'retired'", []).unwrap();
-  let rc = Config { section: Section::ReadingComprehension, ..config(Explanations::AtEnd, 1) };
+  let rc = Config {
+    section: Section::ReadingComprehension,
+    passage_count: Some(1),
+    ..config(Explanations::AtEnd, 1)
+  };
   let result = create(&mut conn, &rc, &["test-rc-1".into()]);
   assert!(refusal(result).contains("no longer available"));
 }
@@ -143,7 +148,11 @@ fn allows_one_unfinished_session_for_each_section() {
   let first = start(&mut conn, Explanations::AtEnd);
   let again = create(&mut conn, &config(Explanations::AtEnd, 1), &ids(&[4]));
   assert!(refusal(again).contains("current session"));
-  let rc = Config { section: Section::ReadingComprehension, ..config(Explanations::AtEnd, 1) };
+  let rc = Config {
+    section: Section::ReadingComprehension,
+    passage_count: Some(1),
+    ..config(Explanations::AtEnd, 1)
+  };
   let rc = create(&mut conn, &rc, &["test-rc-1".into()]).unwrap();
   assert!(rc.questions[0].passage.is_some());
   abandon(&mut conn, &first.id).unwrap();
@@ -647,6 +656,7 @@ fn a_clock_for_one_session_does_not_affect_another() {
   let (mut conn, session, t) = timed(&dir);
   let rc = Config {
     section: Section::ReadingComprehension,
+    passage_count: Some(1),
     time_limit_seconds: Some(60),
     ..config(Explanations::AtEnd, 1)
   };
@@ -662,5 +672,179 @@ fn a_clock_for_one_session_does_not_affect_another() {
 #[test]
 fn sessions_saved_before_timers_existed_are_untimed() {
   let old = r#"{"section":"logical_reasoning","category_ids":[],"difficulties":[],"question_count":1,"explanations":"at_end"}"#;
-  assert_eq!(serde_json::from_str::<Config>(old).unwrap().time_limit_seconds, None);
+  let config: Config = serde_json::from_str(old).unwrap();
+  assert_eq!((config.time_limit_seconds, config.passage_count), (None, None));
+}
+
+// ---------------------------------------------------------------- Reading Comprehension
+
+/// TEST DATA ONLY: passage p1 with questions z, a, m (in that order) and p2 with b, c.
+fn rc_database(dir: &TempDir) -> Connection {
+  let mut package: Value =
+    serde_json::from_str(include_str!("../../../tests/fixtures/valid-package.json")).unwrap();
+  let passage = package["passages"][0].clone();
+  let question = package["questions"][1].clone();
+  let with_id = |item: &Value, id: &str| {
+    let mut item = item.clone();
+    item["id"] = json!(id);
+    item
+  };
+  package["passages"] = json!([with_id(&passage, "p1"), with_id(&passage, "p2")]);
+  package["questions"] = json!([]);
+  for (id, passage_id, category, difficulty) in [
+    ("z", "p1", "rc-detail", 1),
+    ("a", "p1", "rc-main-idea", 3),
+    ("m", "p1", "rc-detail", 2),
+    ("b", "p2", "rc-detail", 1),
+    ("c", "p2", "rc-structure", 4),
+  ] {
+    let mut item = with_id(&question, id);
+    item["passage_id"] = json!(passage_id);
+    item["primary_category"] = json!(category);
+    item["difficulty"] = json!(difficulty);
+    package["questions"].as_array_mut().unwrap().push(item);
+  }
+  let path = dir.0.join("rc.json");
+  std::fs::write(&path, package.to_string()).unwrap();
+  let mut conn = db::open(&dir.0).unwrap();
+  let mut session = import::Session::default();
+  session.choose(&conn, &path).unwrap();
+  session.preview(&mut conn).unwrap();
+  session.confirm(&mut conn).unwrap();
+  conn
+}
+
+fn rc_config(passage_count: usize, question_count: usize) -> Config {
+  Config {
+    section: Section::ReadingComprehension,
+    passage_count: Some(passage_count),
+    ..config(Explanations::AtEnd, question_count)
+  }
+}
+
+fn rc_create(conn: &mut Connection, config: &Config, ids: &str) -> Result<Session> {
+  let ids: Vec<_> = ids.chars().map(String::from).collect();
+  create(conn, config, &ids)
+}
+
+#[test]
+fn starts_with_whole_passages_in_the_chosen_order() {
+  let dir = TempDir::new();
+  let mut conn = rc_database(&dir);
+  let session = rc_create(&mut conn, &rc_config(2, 5), "bczam").unwrap();
+  let found: String =
+    session.questions.iter().map(|question| question.question_id.as_str()).collect();
+  assert_eq!(found, "bczam");
+  let passages: Vec<_> = serde_json::to_value(&session).unwrap()["questions"]
+    .as_array()
+    .unwrap()
+    .iter()
+    .map(|question| question["passage"]["id"].as_str().unwrap().to_owned())
+    .collect();
+  assert_eq!(passages, ["p2", "p2", "p1", "p1", "p1"]);
+}
+
+#[test]
+fn refuses_passages_that_are_split_reordered_or_incomplete() {
+  let dir = TempDir::new();
+  let mut conn = rc_database(&dir);
+  for (passages, ids, expected) in [
+    (1, "za", "all of its questions"),
+    (1, "zma", "all of its questions"),
+    (1, "azm", "all of its questions"),
+    (2, "zambc", ""),
+    (2, "zabmc", "do not match"),
+    (2, "zabcm", "do not match"),
+    (3, "zabcm", "do not match"),
+    (1, "zambc", "do not match"),
+    (2, "zam", "do not match"),
+  ] {
+    let result = rc_create(&mut conn, &rc_config(passages, ids.len()), ids);
+    if expected.is_empty() {
+      abandon(&mut conn, &result.unwrap().id).unwrap();
+    } else {
+      assert!(refusal(result).contains(expected), "{passages} {ids}");
+    }
+  }
+}
+
+#[test]
+fn filters_apply_to_the_passage_and_keep_its_other_questions() {
+  let dir = TempDir::new();
+  let mut conn = rc_database(&dir);
+  let filtered = |categories: &[&str], difficulties: &[i64]| Config {
+    category_ids: categories.iter().map(|id| id.to_string()).collect(),
+    difficulties: difficulties.to_vec(),
+    ..rc_config(1, 3)
+  };
+  let session = rc_create(&mut conn, &filtered(&["rc-main-idea"], &[]), "zam").unwrap();
+  assert_eq!(session.questions.len(), 3);
+  abandon(&mut conn, &session.id).unwrap();
+  for config in [
+    filtered(&["rc-structure"], &[]),
+    filtered(&[], &[4]),
+    // Both must match on the same question.
+    filtered(&["rc-main-idea"], &[1]),
+  ] {
+    assert!(refusal(rc_create(&mut conn, &config, "zam")).contains("does not fit"));
+  }
+}
+
+#[test]
+fn questions_that_cannot_be_practiced_are_left_out_of_the_set() {
+  let dir = TempDir::new();
+  let mut conn = rc_database(&dir);
+  conn.execute("UPDATE questions SET status = 'retired' WHERE id = 'a'", []).unwrap();
+  assert!(refusal(rc_create(&mut conn, &rc_config(1, 3), "zam")).contains("no longer available"));
+  let session = rc_create(&mut conn, &rc_config(1, 2), "zm").unwrap();
+  abandon(&mut conn, &session.id).unwrap();
+  conn.execute("UPDATE question_categories SET active = 0 WHERE id = 'rc-structure'", []).unwrap();
+  rc_create(&mut conn, &rc_config(1, 1), "b").unwrap();
+}
+
+#[test]
+fn refuses_a_set_that_grew_since_it_was_chosen() {
+  let dir = TempDir::new();
+  let mut conn = rc_database(&dir);
+  // Copies question c as another question of p2.
+  conn
+    .execute_batch(
+      "BEGIN;
+       INSERT INTO questions SELECT 'd', section, category_id, difficulty, stimulus, prompt, 'd:C',
+         estimated_seconds, passage_id, content_version, status, provenance_json, quality_json,
+         package_id, package_version, created_at, updated_at FROM questions WHERE id = 'c';
+       INSERT INTO answer_choices SELECT 'd:' || choice_label, 'd', choice_label, choice_text,
+         explanation, display_order FROM answer_choices WHERE question_id = 'c';
+       COMMIT;",
+    )
+    .unwrap();
+  assert!(refusal(rc_create(&mut conn, &rc_config(1, 2), "bc")).contains("all of its questions"));
+  rc_create(&mut conn, &rc_config(1, 3), "bcd").unwrap();
+}
+
+#[test]
+fn passage_counts_belong_to_reading_comprehension_only() {
+  let dir = TempDir::new();
+  let mut conn = database(&dir);
+  let lr = Config { passage_count: Some(1), ..config(Explanations::AtEnd, 1) };
+  assert!(refusal(create(&mut conn, &lr, &ids(&[1]))).contains("does not fit"));
+  let rc = Config { passage_count: None, ..rc_config(1, 1) };
+  assert!(refusal(create(&mut conn, &rc, &["test-rc-1".into()])).contains("does not fit"));
+  let mixed = rc_config(1, 1);
+  assert!(refusal(create(&mut conn, &mixed, &ids(&[1]))).contains("does not fit"));
+}
+
+#[test]
+fn a_passage_survives_recovery_exactly_as_shown() {
+  let dir = TempDir::new();
+  let mut conn = rc_database(&dir);
+  let before = rc_create(&mut conn, &rc_config(1, 3), "zam").unwrap();
+  conn
+    .execute_batch(
+      "UPDATE passage_texts SET text = 'changed'; UPDATE passages SET title = 'changed', status = 'retired';",
+    )
+    .unwrap();
+  drop(conn);
+  let conn = db::open(&dir.0).unwrap();
+  assert_eq!(unfinished(&conn, Section::ReadingComprehension).unwrap(), Some(before));
 }

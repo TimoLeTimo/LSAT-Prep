@@ -1,4 +1,5 @@
 import { filterQuestions, type QuestionFilter, type QuestionSummary } from './filterQuestions'
+import { pickRandom } from './shuffle'
 
 export type ChosenQuestions =
   | { ok: true; ids: string[] }
@@ -18,10 +19,5 @@ export function chooseQuestions(
   if (!Number.isInteger(count) || count < 1) return { ok: false, reason: 'invalid_count' }
   const pool = filterQuestions(questions, filter).map(({ id }) => id)
   if (pool.length < count) return { ok: false, reason: 'not_enough', available: pool.length }
-  // Fisher–Yates shuffle, stopping once enough have been picked.
-  for (let index = 0; index < count; index++) {
-    const other = index + Math.floor(random() * (pool.length - index))
-    ;[pool[index], pool[other]] = [pool[other], pool[index]]
-  }
-  return { ok: true, ids: pool.slice(0, count) }
+  return { ok: true, ids: pickRandom(pool, count, random) }
 }

@@ -26,7 +26,8 @@ pub struct QuestionIndex {
 }
 
 /// Active categories, and approved questions in them. An RC question also needs an
-/// approved passage.
+/// approved passage. Questions are in the order they were imported, which keeps the order
+/// within each passage.
 pub fn index(conn: &Connection) -> rusqlite::Result<QuestionIndex> {
   let categories = conn
     .prepare(
@@ -43,7 +44,7 @@ pub fn index(conn: &Connection) -> rusqlite::Result<QuestionIndex> {
        LEFT JOIN passages p ON p.id = q.passage_id
        WHERE q.status = 'approved' AND c.active = 1
          AND (q.passage_id IS NULL OR p.status = 'approved')
-       ORDER BY q.id",
+       ORDER BY q.rowid",
     )?
     .query_map([], |row| {
       Ok(QuestionSummary {
@@ -105,6 +106,23 @@ mod tests {
         passage_id: Some("test-passage-1".into()),
       }
     );
+  }
+
+  #[test]
+  fn keeps_the_imported_order() {
+    let dir = TempDir::new();
+    let mut conn = imported(&dir);
+    let mut package: serde_json::Value = serde_json::from_str(VALID).unwrap();
+    package["package_id"] = "second".into();
+    package["questions"][0]["id"] = "zz".into();
+    package["questions"][1]["id"] = "aa".into();
+    let path = dir.0.join("second.json");
+    std::fs::write(&path, package.to_string()).unwrap();
+    let mut session = Session::default();
+    session.choose(&conn, &path).unwrap();
+    session.preview(&mut conn).unwrap();
+    session.confirm(&mut conn).unwrap();
+    assert_eq!(ids(&conn), ["test-lr-1", "test-rc-1", "zz", "aa"]);
   }
 
   #[test]

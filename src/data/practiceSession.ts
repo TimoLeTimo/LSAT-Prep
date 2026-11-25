@@ -10,6 +10,8 @@ export interface SessionConfig {
   difficulties: Difficulty[]
   question_count: number
   explanations: 'after_each' | 'at_end'
+  /** RC only: how many whole passage sets. Null for LR. */
+  passage_count: number | null
   /** Null means untimed. */
   time_limit_seconds: number | null
 }
@@ -29,7 +31,7 @@ export interface SessionQuestion {
   stimulus: string | null
   prompt: string
   choices: { label: ChoiceLabel; text: string }[]
-  passage: { title: string; texts: { label: 'A' | 'B'; text: string }[] } | null
+  passage: { id: string; title: string; texts: { label: 'A' | 'B'; text: string }[] } | null
   selected: ChoiceLabel | null
   /** Lasts only for this session. */
   is_flagged: boolean

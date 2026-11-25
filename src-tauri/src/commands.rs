@@ -439,6 +439,31 @@ mod tests {
   }
 
   #[test]
+  fn the_interface_can_start_a_passage_set() {
+    let dir = TempDir::new();
+    let mut conn = db::open(&dir.0).unwrap();
+    let path = dir.0.join("package.json");
+    std::fs::write(&path, VALID).unwrap();
+    let mut import = Session::default();
+    import.choose(&conn, &path).unwrap();
+    import.preview(&mut conn).unwrap();
+    import.confirm(&mut conn).unwrap();
+    let app = app(Ok(conn));
+    let window = window(&app);
+    let config = json!({
+      "section": "reading_comprehension", "category_ids": [], "difficulties": [],
+      "question_count": 1, "explanations": "at_end", "passage_count": 1, "time_limit_seconds": null
+    });
+    let body = json!({ "config": config, "questionIds": ["test-rc-1"] });
+    let session = call(&window, "create_session", body).unwrap();
+    let passage = &session["questions"][0]["passage"];
+    assert_eq!(passage["id"], "test-passage-1");
+    assert_eq!(passage["texts"].as_array().unwrap().len(), 2);
+    let section = json!({ "section": "reading_comprehension" });
+    assert_eq!(call(&window, "unfinished_session", section), Ok(session));
+  }
+
+  #[test]
   fn the_interface_has_no_general_file_or_dialog_access() {
     let dir = TempDir::new();
     let app = app(Ok(db::open(&dir.0).unwrap()));

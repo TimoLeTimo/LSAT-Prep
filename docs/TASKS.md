@@ -59,6 +59,7 @@ Update this file as milestones are completed. Keep tasks small enough to verify.
 - [ ] Autosave and session recovery. (Built; real-window check remains.)
 
 ## Milestone 4 — Reading Comprehension
+- [x] Choose whole passage sets and start RC sessions (no screens yet).
 - [ ] Passage display.
 - [ ] Passage-question association.
 - [ ] Comparative passages.

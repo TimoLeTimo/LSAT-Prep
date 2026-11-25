@@ -101,23 +101,28 @@ pub fn create(conn: &mut Connection, config: &Config, question_ids: &[String]) -
        created_at, time_limit_seconds) VALUES (?1, 'targeted', ?2, 'in_progress', ?3, ?3, ?4)",
     params![id, to_json(config)?, time, config.time_limit_seconds],
   )?;
-  for (position, question_id) in question_ids.iter().enumerate() {
-    let snapshot = take_snapshot(&tx, config, question_id)?;
+  let snapshots = question_ids
+    .iter()
+    .map(|question_id| take_snapshot(&tx, question_id))
+    .collect::<Result<Vec<_>>>()?;
+  check_fit(&tx, config, &snapshots)?;
+  for (position, (question_id, snapshot)) in question_ids.iter().zip(&snapshots).enumerate() {
     tx.prepare_cached(
       "INSERT INTO session_questions (id, session_id, question_id, display_order,
          content_snapshot_json) VALUES (?1, ?2, ?3, ?4, ?5)",
     )?
-    .execute(params![new_id(&tx)?, id, question_id, position as i64, to_json(&snapshot)?])?;
+    .execute(params![new_id(&tx)?, id, question_id, position as i64, to_json(snapshot)?])?;
   }
   let session = load(&tx, &id)?;
   tx.commit()?;
   Ok(session)
 }
 
-/// A full copy of the question, if it can be practiced and fits the session.
-fn take_snapshot(conn: &Connection, config: &Config, id: &str) -> Result<Snapshot> {
-  const UNAVAILABLE: PracticeError =
-    PracticeError::Refused("A chosen question is no longer available. Start again.");
+const UNAVAILABLE: PracticeError =
+  PracticeError::Refused("A chosen question is no longer available. Start again.");
+
+/// A full copy of the question, if it can be practiced.
+fn take_snapshot(conn: &Connection, id: &str) -> Result<Snapshot> {
   let available: Option<String> = conn
     .prepare_cached(
       "SELECT c.name FROM questions q
@@ -130,14 +135,64 @@ fn take_snapshot(conn: &Connection, config: &Config, id: &str) -> Result<Snapsho
     .optional()?;
   let category_name = available.ok_or(UNAVAILABLE)?;
   let question = store::load_question(conn, id)?.ok_or(UNAVAILABLE)?;
-  if !config.accepts(&question) {
-    return Err(PracticeError::Refused("A chosen question does not fit this session."));
-  }
   let passage = match &question.passage_id {
     Some(passage_id) => Some(store::load_passage(conn, passage_id)?.ok_or(UNAVAILABLE)?),
     None => None,
   };
   Ok(Snapshot { snapshot_version: 1, category_name, question, passage })
+}
+
+fn check_fit(conn: &Connection, config: &Config, snapshots: &[Snapshot]) -> Result<()> {
+  const MISFIT: PracticeError =
+    PracticeError::Refused("A chosen question does not fit this session.");
+  if snapshots.iter().any(|snapshot| snapshot.question.section != config.section) {
+    return Err(MISFIT);
+  }
+  match (config.section, config.passage_count) {
+    (Section::ReadingComprehension, Some(count)) => {
+      check_passage_sets(conn, config, snapshots, count)
+    }
+    (Section::LogicalReasoning, None) => {
+      let all_match = snapshots.iter().all(|snapshot| config.matches(&snapshot.question));
+      if all_match { Ok(()) } else { Err(MISFIT) }
+    }
+    _ => Err(MISFIT),
+  }
+}
+
+/// Each passage must appear once, with all of its available questions, in order. At least
+/// one of them must match the filters.
+fn check_passage_sets(
+  conn: &Connection,
+  config: &Config,
+  snapshots: &[Snapshot],
+  count: usize,
+) -> Result<()> {
+  let sets: Vec<_> = snapshots
+    .chunk_by(|a, b| a.question.passage_id == b.question.passage_id)
+    .collect();
+  let passages: BTreeSet<_> = sets.iter().map(|set| &set[0].question.passage_id).collect();
+  if sets.len() != count || passages.len() != count {
+    return Err(PracticeError::Refused("The passages do not match the session."));
+  }
+  for set in sets {
+    let available = conn
+      .prepare_cached(
+        "SELECT q.id FROM questions q JOIN question_categories c ON c.id = q.category_id
+         WHERE q.passage_id = ?1 AND q.status = 'approved' AND c.active = 1 ORDER BY q.rowid",
+      )?
+      .query_map([&set[0].question.passage_id], |row| row.get(0))?
+      .collect::<rusqlite::Result<Vec<String>>>()?;
+    if !set.iter().map(|snapshot| &snapshot.question.id).eq(&available) {
+      return Err(PracticeError::Refused(
+        "A passage must keep all of its questions, in order. Start again.",
+      ));
+    }
+    if !set.iter().any(|snapshot| config.matches(&snapshot.question)) {
+      return Err(PracticeError::Refused("A chosen passage does not fit this session."));
+    }
+  }
+  Ok(())
 }
 
 fn unfinished_id(conn: &Connection, section: Section) -> rusqlite::Result<Option<String>> {
